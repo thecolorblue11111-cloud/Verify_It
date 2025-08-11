@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Proof Logger{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2>Welcome, {{ current_user.username }}</h2>
+        <a href="{{ url_for('new_log') }}" class="button">+ New Log</a>
+    </div>
+    
+    {% if logs %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Recipient</th>
+                    <th>Description</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.method }}</td>
+                    <td>{{ log.recipient }}</td>
+                    <td>{{ log.description[:50] }}{% if log.description|length > 50 %}...{% endif %}</td>
+                    <td class="meta">{{ log.timestamp[:16] }}</td>
+                    <td>
+                        <a href="{{ url_for('view_log', log_id=log.id) }}">View</a>
+                        <a href="{{ url_for('export_log', log_id=log.id) }}" style="margin-left: 8px;">Export</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 32px;">
+        <p class="meta">No logs yet. Create your first communication log to get started.</p>
+        <a href="{{ url_for('new_log') }}" class="button" style="margin-top: 16px;">Create First Log</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
