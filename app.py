@@ -80,8 +80,8 @@ def create_opentimestamp(data_hash, log_id, user_id):
         if result.returncode == 0:
             ots_file = f"{hash_file}.ots"
             if os.path.exists(ots_file):
-                # Store relative path
-                relative_ots_path = f"{user_id}/timestamps/log_{log_id}_hash.txt.ots"
+                # Store relative path (derive from actual ots_file path)
+                relative_ots_path = os.path.relpath(ots_file, UPLOAD_FOLDER)
                 
                 # Update database with timestamp info
                 conn = sqlite3.connect('database.db')
@@ -367,8 +367,8 @@ def create_log():
     ''', (current_user.id, method, recipient, description, notes, timestamp,
           file_path, audio_path, transcript, verification_hash))
     
-    log_id = cursor.lastrowid
     conn.commit()
+    log_id = cursor.lastrowid
     conn.close()
     
     # Create OpenTimestamp for the log
