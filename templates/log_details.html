@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Log Details - Proof Logger{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h2>Log Details</h2>
+        <div>
+            <a href="{{ url_for('export_log', log_id=log.id) }}" class="button secondary">Export</a>
+            <a href="{{ url_for('dashboard') }}" class="button secondary" style="margin-left: 8px;">Back</a>
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field">
+            <label>Method:</label>
+            <p>{{ log.method }}</p>
+        </div>
+        
+        <div class="field">
+            <label>Recipient:</label>
+            <p>{{ log.recipient }}</p>
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field">
+            <label>Date/Time:</label>
+            <p class="meta">{{ log.timestamp }}</p>
+        </div>
+    </div>
+    
+    <div class="form-row">
+        <div class="field">
+            <label>Description:</label>
+            <p>{{ log.description }}</p>
+        </div>
+    </div>
+    
+    {% if log.notes %}
+    <div class="form-row">
+        <div class="field">
+            <label>Notes:</label>
+            <p>{{ log.notes }}</p>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if log.file_path %}
+    <div class="form-row">
+        <div class="field">
+            <label>Evidence File:</label>
+            <p><a href="{{ url_for('uploaded_file', filename=log.file_path) }}" target="_blank">📄 Download File</a></p>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if log.audio_path %}
+    <div class="form-row">
+        <div class="field">
+            <label>Audio Recording:</label>
+            <audio controls style="width: 100%; margin-top: 8px;">
+                <source src="{{ url_for('uploaded_file', filename=log.audio_path) }}" type="audio/webm">
+                <source src="{{ url_for('uploaded_file', filename=log.audio_path) }}" type="audio/wav">
+                Your browser does not support audio playback.
+            </audio>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if log.transcript %}
+    <div class="form-row">
+        <div class="field">
+            <label>Transcript:</label>
+            <div class="card" style="background: rgba(255,255,255,0.02); padding: 12px;">
+                <p>{{ log.transcript }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="form-row">
+        <div class="field">
+            <label>Verification Hash:</label>
+            <div class="card" style="background: rgba(255,255,255,0.02); padding: 12px;">
+                <code style="font-family: monospace; font-size: 0.85rem; color: var(--accent);">{{ log.verification_hash }}</code>
+            </div>
+            <p class="meta" style="margin-top: 4px;">This SHA256 hash can be used to verify the integrity of this log entry.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

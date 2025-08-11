@@ -1,0 +1,192 @@
+Got it — I’ll make the **full HTML template layouts** now so the Replit Agent doesn’t just give you placeholder pages.
+These will be simple but clean, mobile-friendly, and ready to drop into `/templates` in your app.
+
+---
+
+### **index.html** (Landing Page)
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proof Logger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>📜 Proof Logger</h1>
+        <nav>
+            <a href="{{ url_for('login') }}">Login</a>
+            <a href="{{ url_for('register') }}">Register</a>
+        </nav>
+    </header>
+    <main>
+        <section>
+            <h2>Track and Prove Your Communications</h2>
+            <p>Never lose proof of a call, email, visit, or text again.</p>
+            <a class="button" href="{{ url_for('register') }}">Get Started</a>
+        </section>
+    </main>
+</body>
+</html>
+```
+
+---
+
+### **login.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Proof Logger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h2>Login</h2>
+    <form method="POST">
+        <label>Username:</label>
+        <input type="text" name="username" required>
+        
+        <label>Password:</label>
+        <input type="password" name="password" required>
+        
+        <button type="submit">Login</button>
+    </form>
+    <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+</body>
+</html>
+```
+
+---
+
+### **register.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Proof Logger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h2>Register</h2>
+    <form method="POST">
+        <label>Username:</label>
+        <input type="text" name="username" required>
+        
+        <label>Email:</label>
+        <input type="email" name="email" required>
+        
+        <label>Password:</label>
+        <input type="password" name="password" required>
+        
+        <button type="submit">Register</button>
+    </form>
+    <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+</body>
+</html>
+```
+
+---
+
+### **dashboard.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Proof Logger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h2>Welcome, {{ current_user.username }}</h2>
+        <nav>
+            <a href="{{ url_for('new_log') }}">+ New Log</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </nav>
+    </header>
+    
+    <main>
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Recipient</th>
+                    <th>Date</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.method }}</td>
+                    <td>{{ log.recipient }}</td>
+                    <td>{{ log.timestamp }}</td>
+                    <td><a href="{{ url_for('view_log', log_id=log.id) }}">View</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </main>
+</body>
+</html>
+```
+
+---
+
+### **log\_details.html**
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Details - Proof Logger</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h2>Log Details</h2>
+    <p><strong>Method:</strong> {{ log.method }}</p>
+    <p><strong>Recipient:</strong> {{ log.recipient }}</p>
+    <p><strong>Date/Time:</strong> {{ log.timestamp }}</p>
+    <p><strong>Description:</strong> {{ log.description }}</p>
+    <p><strong>Notes:</strong> {{ log.notes }}</p>
+    
+    {% if log.file_path %}
+    <p><strong>Evidence File:</strong> <a href="{{ url_for('uploaded_file', filename=log.file_path) }}">Download</a></p>
+    {% endif %}
+    
+    {% if log.audio_path %}
+    <p><strong>Audio Recording:</strong></p>
+    <audio controls>
+        <source src="{{ url_for('uploaded_file', filename=log.audio_path) }}" type="audio/wav">
+    </audio>
+    {% endif %}
+    
+    {% if log.transcript %}
+    <p><strong>Transcript:</strong> {{ log.transcript }}</p>
+    {% endif %}
+    
+    <p><strong>Verification Hash:</strong> {{ log.verification_hash }}</p>
+    
+    <a href="{{ url_for('export_log', log_id=log.id) }}">Export This Log</a>
+</body>
+</html>
+```
+
+---
+
+If you want, I can also make the **style.css** and **script.js** so your app is mobile-friendly and the audio recording actually works right away.
+
+Do you want me to add those too so your Replit Agent builds everything in one go? That way you’ll literally open it and have the finished app.

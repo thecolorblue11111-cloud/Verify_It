@@ -1,0 +1,71 @@
+Alright — if you give this to the Replit Agent **with the database schema included**, it will have **everything it needs** to create your fully functional proof app in one go.
+
+Here’s the **final version** you can paste to them:
+
+---
+
+**Replit Agent Request:**
+
+> Build me a full-featured Python web app using Flask that allows users to track and prove communications with organizations (calls, emails, in-person visits, texts) to resolve disputes like missed appointments. The app should have:
+>
+> 1. **User Authentication** – Sign up, log in, log out. Use Flask-Login and password hashing.
+> 2. **Dashboard** – Shows a table of all user logs with filters for date, method, and recipient.
+> 3. **Log Creation Form** – Fields: method (dropdown), recipient/organization name, date/time (auto timestamp), description, notes, file upload (evidence), and optional browser-based audio recording.
+> 4. **Audio Recording & Transcription** – Record audio in the browser (JavaScript/WebRTC) and save it. Automatically transcribe uploaded/recorded audio using Python’s SpeechRecognition.
+> 5. **Evidence Storage** – Save uploaded files in an `/uploads` folder under the user’s account.
+> 6. **Log Details Page** – Shows all info, files, audio playback, and transcript.
+> 7. **Export Proof** – Select logs and export as a PDF or ZIP including all evidence and timestamps.
+> 8. **Verification Hash** – For each log, generate and display a SHA256 hash to prove data integrity.
+> 9. **Responsive Design** – Mobile-friendly HTML/CSS/JS layout.
+> 10. **Security** – Only logged-in users can see their logs. Restrict file uploads to safe types.
+>
+> **Database Schema:**
+>
+> Table: `users`
+>
+> * id (INTEGER, PRIMARY KEY, AUTOINCREMENT)
+> * username (TEXT, UNIQUE, NOT NULL)
+> * email (TEXT, UNIQUE, NOT NULL)
+> * password\_hash (TEXT, NOT NULL)
+> * created\_at (DATETIME, DEFAULT CURRENT\_TIMESTAMP)
+>
+> Table: `logs`
+>
+> * id (INTEGER, PRIMARY KEY, AUTOINCREMENT)
+> * user\_id (INTEGER, FOREIGN KEY -> users.id)
+> * method (TEXT) – e.g., "Call", "Email", "Visit", "Text"
+> * recipient (TEXT)
+> * description (TEXT)
+> * notes (TEXT)
+> * timestamp (DATETIME, DEFAULT CURRENT\_TIMESTAMP)
+> * file\_path (TEXT, optional)
+> * audio\_path (TEXT, optional)
+> * transcript (TEXT, optional)
+> * verification\_hash (TEXT)
+>
+> Table: `sessions` (for Flask-Login session management if needed)
+>
+> **Folder Structure:**
+>
+> ```
+> /templates
+>     index.html
+>     login.html
+>     register.html
+>     dashboard.html
+>     log_details.html
+> /static
+>     style.css
+>     script.js
+> /uploads
+> app.py
+> database.db
+> ```
+>
+> Make sure the code runs fully in Replit with no local dependencies, and that all templates are created.
+
+---
+
+If you paste that into the Replit Agent, you’ll basically get a **ready-to-use web app** with all your proof features built in.
+
+Do you want me to also **prewrite the HTML template layouts** so the Replit Agent won’t just make placeholders but real working pages? That will make the end result look polished right away.

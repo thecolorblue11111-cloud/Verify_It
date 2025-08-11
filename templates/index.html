@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header>
+    <h1>📜 Proof Logger</h1>
+    <nav>
+        <a href="{{ url_for('login') }}">Login</a>
+        <a href="{{ url_for('register') }}" class="button">Register</a>
+    </nav>
+</header>
+
+<main>
+    <div class="card" style="text-align: center; max-width: 600px; margin: 0 auto;">
+        <h2>Track and Prove Your Communications</h2>
+        <p>Never lose proof of a call, email, visit, or text again. Create verifiable logs with timestamps, audio recordings, and file attachments.</p>
+        
+        <div style="margin-top: 24px;">
+            <a class="button" href="{{ url_for('register') }}">Get Started</a>
+            <a class="button secondary" href="{{ url_for('login') }}">Sign In</a>
+        </div>
+        
+        <div style="margin-top: 32px; text-align: left;">
+            <h3>Features:</h3>
+            <ul style="list-style: none; padding: 0;">
+                <li>🎤 Record audio directly in your browser</li>
+                <li>📁 Upload evidence files and documents</li>
+                <li>🔐 SHA256 verification hashes for data integrity</li>
+                <li>📱 Mobile-friendly responsive design</li>
+                <li>📊 Export logs as PDF or ZIP files</li>
+                <li>🎯 Automatic speech-to-text transcription</li>
+            </ul>
+        </div>
+    </div>
+</main>
+{% endblock %}

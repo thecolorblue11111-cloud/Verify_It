@@ -1,0 +1,263 @@
+Nice — below are ready-to-drop **`style.css`** and **`script.js`** files you can place in your app’s **`/static`** folder. They:
+
+* Make the site clean and mobile-friendly.
+* Add client-side behavior for the log form.
+* Implement browser audio recording (MediaRecorder), preview/playback, and attach audio to a form-ready `Blob` so your Flask endpoints can accept it.
+
+**Important:** the JS assumes your Flask app has endpoints to receive multipart form uploads (`/create_log` or similar) and routes to serve uploaded files. If your server uses different endpoint names, you’ll need to update the `FORM_UPLOAD_URL` constant in the JS.
+
+---
+
+### `/static/style.css`
+
+```css
+/* Basic reset */
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Inter, system-ui, -apple-system, "Helvetica Neue", Arial; }
+
+:root{
+  --bg:#0f1724;
+  --card:#0b1220;
+  --muted:#93a0b6;
+  --accent:#6ee7b7;
+  --glass: rgba(255,255,255,0.03);
+}
+
+body{
+  background: linear-gradient(180deg, #071028 0%, #0b1220 100%);
+  color:#e6eef8;
+  min-height:100vh;
+  padding:20px;
+}
+
+/* Container */
+.container{
+  max-width:980px;
+  margin:0 auto;
+  padding:18px;
+}
+
+/* Header */
+header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:18px;
+}
+h1 { font-size:1.4rem; letter-spacing: -0.02em; }
+nav a { color:var(--muted); margin-left:12px; text-decoration:none; font-size:0.95rem; }
+nav a.button { background:var(--accent); color:#042024; padding:8px 12px; border-radius:10px; font-weight:600; }
+
+/* Card */
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius:12px;
+  padding:16px;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+  margin-bottom:16px;
+}
+
+/* Form */
+.form-row { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+.form-row .field { flex:1 1 220px; }
+label { display:block; font-size:0.9rem; color:var(--muted); margin-bottom:6px; }
+input[type="text"], input[type="email"], textarea, select, input[type="datetime-local"]{
+  width:100%;
+  padding:10px 12px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.04);
+  background:var(--glass);
+  color:inherit;
+}
+textarea { min-height:80px; resize:vertical; }
+
+/* Buttons */
+.button {
+  background:var(--accent);
+  color:#042024;
+  padding:10px 14px;
+  border-radius:10px;
+  border:none;
+  font-weight:700;
+  cursor:pointer;
+}
+.button.secondary { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--muted); }
+
+/* Table */
+.table-wrap { overflow:auto; }
+table { width:100%; border-collapse:collapse; margin-top:12px; }
+th, td { text-align:left; padding:10px 8px; border-bottom:1px solid rgba(255,255,255,0.03); font-size:0.95rem; color: #dbeaf7; }
+th { color:var(--muted); font-weight:600; font-size:0.9rem; }
+
+/* Small helpers */
+.meta { color:var(--muted); font-size:0.85rem; }
+.file-list { margin-top:8px; }
+
+/* Audio controls */
+.audio-controls { display:flex; gap:8px; align-items:center; margin-top:8px; }
+
+/* Responsive */
+@media (max-width:600px){
+  header { flex-direction:column; align-items:flex-start; gap:10px; }
+  .form-row { flex-direction:column; }
+}
+```
+
+---
+
+### `/static/script.js`
+
+```js
+/* Client-side JS for Proof Logger
+ * - Handles audio recording (MediaRecorder)
+ * - Prepares form data (including audio blob) for upload
+ * - Small UI helpers: preview file names, toggle record button
+ *
+ * IMPORTANT: update FORM_UPLOAD_URL to match your Flask upload endpoint.
+ */
+
+const FORM_UPLOAD_URL = "/create_log"; // change to your server route that receives the form POST
+
+// Elements (expect these IDs in your new_log template)
+const recordBtn = document.getElementById("record-btn");
+const stopBtn = document.getElementById("stop-btn");
+const audioPreview = document.getElementById("audio-preview");
+const audioPlayer = document.getElementById("audio-player");
+const fileInput = document.getElementById("file-input");
+const attachList = document.getElementById("attach-list");
+const logForm = document.getElementById("log-form");
+
+let mediaRecorder = null;
+let audioChunks = [];
+
+// --- Audio recording setup ---
+async function startRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Audio recording not supported in this browser.");
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = buildAudioBlob;
+    mediaRecorder.start();
+    toggleRecordingUI(true);
+  } catch (err) {
+    console.error("Error accessing microphone:", err);
+    alert("Could not access microphone.");
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    mediaRecorder.stop();
+    toggleRecordingUI(false);
+  }
+}
+
+function toggleRecordingUI(recording) {
+  if (recording) {
+    recordBtn.disabled = true;
+    stopBtn.disabled = false;
+    recordBtn.classList.add("recording");
+  } else {
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+    recordBtn.classList.remove("recording");
+  }
+}
+
+function buildAudioBlob() {
+  const blob = new Blob(audioChunks, { type: "audio/webm" });
+  const url = URL.createObjectURL(blob);
+  audioPlayer.src = url;
+  audioPlayer.style.display = "block";
+  audioPlayer.controls = true;
+  // store blob on form element for upload
+  audioPlayer.dataset.blob = url;
+  audioPlayer._blob = blob; // nonstandard but handy for upload
+  attachList.innerHTML = `<div>Recorded audio ready (${Math.round(blob.size/1024)} KB)</div>`;
+}
+
+// --- File input preview ---
+if (fileInput) {
+  fileInput.addEventListener("change", () => {
+    attachList.innerHTML = "";
+    for (const f of fileInput.files) {
+      const li = document.createElement("div");
+      li.textContent = `${f.name} (${Math.round(f.size/1024)} KB)`;
+      attachList.appendChild(li);
+    }
+  });
+}
+
+// --- Form submission (send form + audio blob via Multipart) ---
+if (logForm) {
+  logForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(logForm);
+
+    // if recorded audio exists, attach it
+    if (audioPlayer && audioPlayer._blob) {
+      // convert stored blob URL to Blob if needed (we already saved as blob)
+      formData.append("audio_file", audioPlayer._blob, `recording-${Date.now()}.webm`);
+    }
+
+    // Add uploaded file(s) if present (file input already included by browser)
+    // Send via fetch to the backend
+    try {
+      const resp = await fetch(FORM_UPLOAD_URL, {
+        method: "POST",
+        body: formData,
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        alert("Upload failed: " + txt);
+        return;
+      }
+      // success: reload to show new log (server should redirect to dashboard)
+      window.location.reload();
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Network error while uploading. Try again.");
+    }
+  });
+}
+
+// --- Attach button bindings (if your HTML uses these IDs) ---
+if (recordBtn) recordBtn.addEventListener("click", startRecording);
+if (stopBtn) stopBtn.addEventListener("click", stopRecording);
+```
+
+---
+
+### Quick Instructions for the Replit Agent / Your Server
+
+1. Put `style.css` and `script.js` into the `/static` folder.
+2. Ensure your `new_log` (or `create_log`) HTML template includes these IDs so the JS hooks work:
+
+   * Form: `<form id="log-form" method="POST" enctype="multipart/form-data" action="/create_log">`
+   * File input: `<input id="file-input" name="evidence_file" type="file" accept="image/*,application/pdf" multiple>`
+   * Record buttons: `<button type="button" id="record-btn">Record</button>` and `<button type="button" id="stop-btn" disabled>Stop</button>`
+   * Audio player: `<audio id="audio-player" style="display:none;"></audio>`
+   * Attachment preview container: `<div id="attach-list"></div>`
+3. Back-end expectations:
+
+   * POST `/create_log` should accept `multipart/form-data`, save uploaded files to `/uploads`, generate `verification_hash`, store `transcript` (if speech-to-text runs server-side), and redirect back to the dashboard on success.
+   * Serve uploaded files via a Flask route like:
+
+     ```py
+     @app.route('/uploads/<filename>')
+     def uploaded_file(filename):
+         return send_from_directory('uploads', filename)
+     ```
+
+---
+
+If you want, I can now:
+
+* Generate the exact **`new_log` HTML** that wires these IDs into the form (so it all just works), **or**
+* Produce the Flask route code for `/create_log` that accepts the form, saves files, and writes to SQLite (including generating the SHA256 `verification_hash` and saving file paths).
+
+Which do you want next?

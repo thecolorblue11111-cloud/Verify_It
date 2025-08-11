@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}New Log - Proof Logger{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Create New Communication Log</h2>
+    
+    <form id="log-form" method="POST" action="{{ url_for('create_log') }}" enctype="multipart/form-data">
+        <div class="form-row">
+            <div class="field">
+                <label for="method">Method:</label>
+                <select id="method" name="method" required>
+                    <option value="">Select method...</option>
+                    <option value="Call">Call</option>
+                    <option value="Email">Email</option>
+                    <option value="Visit">Visit</option>
+                    <option value="Text">Text</option>
+                    <option value="Letter">Letter</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            
+            <div class="field">
+                <label for="recipient">Recipient/Organization:</label>
+                <input type="text" id="recipient" name="recipient" required>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="field">
+                <label for="description">Description:</label>
+                <textarea id="description" name="description" required placeholder="Brief description of the communication..."></textarea>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="field">
+                <label for="notes">Notes (optional):</label>
+                <textarea id="notes" name="notes" placeholder="Additional notes or context..."></textarea>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="field">
+                <label for="file-input">Evidence File:</label>
+                <input id="file-input" name="evidence_file" type="file" accept="image/*,application/pdf,.doc,.docx,.txt">
+                <div id="attach-list" class="file-list"></div>
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div class="field">
+                <label>Audio Recording:</label>
+                <div class="audio-controls">
+                    <button type="button" id="record-btn" class="button secondary">🎤 Record</button>
+                    <button type="button" id="stop-btn" class="button secondary" disabled>⏹️ Stop</button>
+                </div>
+                <audio id="audio-player" style="display:none; margin-top: 8px;" controls></audio>
+                <div id="audio-preview" class="meta" style="margin-top: 8px;"></div>
+            </div>
+        </div>
+        
+        <div class="form-row" style="margin-top: 24px;">
+            <button type="submit" class="button">Create Log</button>
+            <a href="{{ url_for('dashboard') }}" class="button secondary" style="margin-left: 12px;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
