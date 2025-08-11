@@ -11,8 +11,6 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import sqlite3
 import speech_recognition as sr
-import io
-import wave
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -82,8 +80,20 @@ def create_opentimestamp(data_hash, log_id, user_id):
             f.write(data_hash)
         
         # Create timestamp using ots command
-        result = subprocess.run(['ots', 'stamp', hash_file], 
-                              capture_output=True, text=True, timeout=30)
+        try:
+            result = subprocess.run(['ots', 'stamp', hash_file], 
+                                  capture_output=True, text=True, timeout=30)
+        except FileNotFoundError:
+            logging.error(f"OpenTimestamps CLI 'ots' not found for log {log_id}")
+            # Mark as failed in database
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', ('failed', log_id, user_id))
+            conn.commit()
+            conn.close()
+            return False
         
         if result.returncode == 0:
             ots_file = f"{hash_file}.ots"
@@ -146,16 +156,24 @@ def check_timestamp_status(log_id, user_id, ots_file_path):
             return 'missing'
         
         # Try to upgrade the timestamp
-        upgrade_result = subprocess.run(['ots', 'upgrade', full_ots_path], 
-                                      capture_output=True, text=True, timeout=30)
-        
-        # Log upgrade issues but continue with verification
-        if upgrade_result.returncode != 0:
-            logging.warning(f"OTS upgrade failed for log {log_id}: {upgrade_result.stderr}")
+        try:
+            upgrade_result = subprocess.run(['ots', 'upgrade', full_ots_path], 
+                                          capture_output=True, text=True, timeout=30)
+            
+            # Log upgrade issues but continue with verification
+            if upgrade_result.returncode != 0:
+                logging.warning(f"OTS upgrade failed for log {log_id}: {upgrade_result.stderr}")
+        except FileNotFoundError:
+            logging.error(f"OpenTimestamps CLI 'ots' not found for timestamp check")
+            return 'error'
         
         # Check verification status
-        verify_result = subprocess.run(['ots', 'verify', full_ots_path], 
-                                     capture_output=True, text=True, timeout=30)
+        try:
+            verify_result = subprocess.run(['ots', 'verify', full_ots_path], 
+                                         capture_output=True, text=True, timeout=30)
+        except FileNotFoundError:
+            logging.error(f"OpenTimestamps CLI 'ots' not found for timestamp verification")
+            return 'error'
         
         status = 'pending'
         confirmed_at = None
@@ -200,9 +218,13 @@ def get_timestamp_info(ots_file_path):
         full_ots_path = os.path.join(UPLOAD_FOLDER, ots_file_path)
         if not os.path.exists(full_ots_path):
             return None
-            
-        result = subprocess.run(['ots', 'info', full_ots_path], 
-                              capture_output=True, text=True, timeout=30)
+        
+        try:
+            result = subprocess.run(['ots', 'info', full_ots_path], 
+                                  capture_output=True, text=True, timeout=30)
+        except FileNotFoundError:
+            logging.error(f"OpenTimestamps CLI 'ots' not found for timestamp info")
+            return None
         
         if result.returncode == 0:
             return result.stdout
@@ -364,8 +386,11 @@ def generate_pdf_export(log_data, log_id, user_id):
         # Build PDF
         doc.build(story)
         
-        # Clean up QR code temp file
-        os.unlink(qr_temp.name)
+        # Clean up QR code temp file after PDF is built
+        try:
+            os.unlink(qr_temp.name)
+        except:
+            pass
         
         return temp_pdf.name
         
@@ -380,12 +405,12 @@ def generate_zip_export(log_data, log_id, user_id):
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         temp_zip.close()
         
+        pdf_path = None
         with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # Add PDF report
             pdf_path = generate_pdf_export(log_data, log_id, user_id)
             if pdf_path:
                 zipf.write(pdf_path, f"log_{log_id}_report.pdf")
-                os.unlink(pdf_path)  # Clean up temp PDF
             
             # Add evidence files
             if log_data.get('file_path'):
@@ -447,6 +472,13 @@ Learn more: https://opentimestamps.org
 """
             
             zipf.writestr("README.txt", instructions)
+        
+        # Clean up temp PDF after ZIP is closed
+        if pdf_path:
+            try:
+                os.unlink(pdf_path)
+            except:
+                pass
         
         return temp_zip.name
         
@@ -789,15 +821,18 @@ def export_log_text(log_id):
     blockchain_info = ""
     
     if blockchain_status == 'confirmed':
+        created_at = str(log_data.get('ots_created_at', 'Unknown'))[:16] if log_data.get('ots_created_at') else 'Unknown'
+        confirmed_at = str(log_data.get('ots_confirmed_at', 'Unknown'))[:16] if log_data.get('ots_confirmed_at') else 'Unknown'
         blockchain_info = f"""
 Blockchain Status: ✓ CONFIRMED on Bitcoin blockchain
-Timestamp Created: {log_data.get('ots_created_at', 'Unknown')[:16] if log_data.get('ots_created_at') else 'Unknown'}
-Blockchain Confirmed: {log_data.get('ots_confirmed_at', 'Unknown')[:16] if log_data.get('ots_confirmed_at') else 'Unknown'}
+Timestamp Created: {created_at}
+Blockchain Confirmed: {confirmed_at}
 Verification: Cryptographically proven via OpenTimestamps"""
     elif blockchain_status == 'pending':
+        created_at = str(log_data.get('ots_created_at', 'Unknown'))[:16] if log_data.get('ots_created_at') else 'Unknown'
         blockchain_info = f"""
 Blockchain Status: ⏳ PENDING blockchain confirmation
-Timestamp Created: {log_data.get('ots_created_at', 'Unknown')[:16] if log_data.get('ots_created_at') else 'Unknown'}
+Timestamp Created: {created_at}
 Verification: Submitted to Bitcoin blockchain, awaiting confirmation"""
     elif blockchain_status == 'failed':
         blockchain_info = f"""
