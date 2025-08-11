@@ -1,6 +1,7 @@
 import os
 import hashlib
 import logging
+import subprocess
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -59,6 +60,140 @@ def transcribe_audio(file_path):
     except Exception as e:
         logging.error(f"Transcription error: {e}")
         return "Transcription failed"
+
+def create_opentimestamp(data_hash, log_id, user_id):
+    """Create an OpenTimestamp for the given data hash"""
+    try:
+        # Create user timestamp directory
+        timestamp_dir = os.path.join(UPLOAD_FOLDER, str(user_id), 'timestamps')
+        os.makedirs(timestamp_dir, exist_ok=True)
+        
+        # Create a temporary file with the hash
+        hash_file = os.path.join(timestamp_dir, f"log_{log_id}_hash.txt")
+        with open(hash_file, 'w') as f:
+            f.write(data_hash)
+        
+        # Create timestamp using ots command
+        result = subprocess.run(['ots', 'stamp', hash_file], 
+                              capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            ots_file = f"{hash_file}.ots"
+            if os.path.exists(ots_file):
+                # Store relative path (derive from actual ots_file path)
+                relative_ots_path = os.path.relpath(ots_file, UPLOAD_FOLDER)
+                
+                # Update database with timestamp info
+                conn = sqlite3.connect('database.db')
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE logs SET ots_file_path = ?, ots_status = ?, ots_created_at = ?
+                    WHERE id = ? AND user_id = ?
+                ''', (relative_ots_path, 'pending', datetime.now(), log_id, user_id))
+                conn.commit()
+                conn.close()
+                
+                logging.info(f"OpenTimestamp created for log {log_id}")
+                return True
+            else:
+                logging.error(f"OTS file not created for log {log_id}")
+                return False
+        else:
+            logging.error(f"OTS stamp failed for log {log_id}: {result.stderr}")
+            # Mark as failed in database
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', ('failed', log_id, user_id))
+            conn.commit()
+            conn.close()
+            return False
+            
+    except Exception as e:
+        logging.error(f"OpenTimestamp creation failed for log {log_id}: {e}")
+        # Mark as failed in database
+        try:
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', ('failed', log_id, user_id))
+            conn.commit()
+            conn.close()
+        except Exception as db_e:
+            logging.error(f"Failed to update database status for log {log_id}: {db_e}")
+        return False
+
+def check_timestamp_status(log_id, user_id, ots_file_path):
+    """Check and update the status of an OpenTimestamp"""
+    try:
+        full_ots_path = os.path.join(UPLOAD_FOLDER, ots_file_path)
+        if not os.path.exists(full_ots_path):
+            return 'missing'
+        
+        # Try to upgrade the timestamp
+        upgrade_result = subprocess.run(['ots', 'upgrade', full_ots_path], 
+                                      capture_output=True, text=True, timeout=30)
+        
+        # Log upgrade issues but continue with verification
+        if upgrade_result.returncode != 0:
+            logging.warning(f"OTS upgrade failed for log {log_id}: {upgrade_result.stderr}")
+        
+        # Check verification status
+        verify_result = subprocess.run(['ots', 'verify', full_ots_path], 
+                                     capture_output=True, text=True, timeout=30)
+        
+        status = 'pending'
+        confirmed_at = None
+        
+        if verify_result.returncode == 0 and 'Success!' in verify_result.stdout:
+            status = 'confirmed'
+            confirmed_at = datetime.now()
+        elif 'Pending' in verify_result.stdout:
+            status = 'pending'
+        else:
+            status = 'failed'
+        
+        # Update database with current status
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        if confirmed_at:
+            cursor.execute('''
+                UPDATE logs SET ots_status = ?, ots_confirmed_at = ?
+                WHERE id = ? AND user_id = ?
+            ''', (status, confirmed_at, log_id, user_id))
+        else:
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', (status, log_id, user_id))
+        conn.commit()
+        conn.close()
+            
+        return status
+        
+    except Exception as e:
+        logging.error(f"Timestamp status check failed for log {log_id}: {e}")
+        return 'error'
+
+def get_timestamp_info(ots_file_path):
+    """Get detailed information about a timestamp"""
+    try:
+        full_ots_path = os.path.join(UPLOAD_FOLDER, ots_file_path)
+        if not os.path.exists(full_ots_path):
+            return None
+            
+        result = subprocess.run(['ots', 'info', full_ots_path], 
+                              capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            return None
+            
+    except Exception as e:
+        logging.error(f"Failed to get timestamp info: {e}")
+        return None
 
 @app.route('/')
 def index():
@@ -133,7 +268,7 @@ def dashboard():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT id, method, recipient, description, timestamp
+        SELECT id, method, recipient, description, timestamp, ots_status
         FROM logs WHERE user_id = ?
         ORDER BY timestamp DESC
     ''', (current_user.id,))
@@ -148,7 +283,8 @@ def dashboard():
             'method': log[1],
             'recipient': log[2],
             'description': log[3],
-            'timestamp': log[4]
+            'timestamp': log[4],
+            'ots_status': log[5] or 'none'
         })
     
     return render_template('dashboard.html', logs=log_list)
@@ -232,9 +368,20 @@ def create_log():
           file_path, audio_path, transcript, verification_hash))
     
     conn.commit()
+    log_id = cursor.lastrowid
     conn.close()
     
-    flash('Log created successfully!')
+    # Create OpenTimestamp for the log
+    try:
+        success = create_opentimestamp(verification_hash, log_id, current_user.id)
+        if success:
+            flash('Log created successfully with blockchain timestamp!')
+        else:
+            flash('Log created successfully, but blockchain timestamping failed.')
+    except Exception as e:
+        logging.error(f"Failed to create timestamp for log {log_id}: {e}")
+        flash('Log created successfully, but blockchain timestamping failed.')
+    
     return redirect(url_for('dashboard'))
 
 @app.route('/log/<int:log_id>')
@@ -244,7 +391,8 @@ def view_log(log_id):
     cursor = conn.cursor()
     cursor.execute('''
         SELECT id, method, recipient, description, notes, timestamp,
-               file_path, audio_path, transcript, verification_hash
+               file_path, audio_path, transcript, verification_hash,
+               ots_file_path, ots_status, ots_created_at, ots_confirmed_at
         FROM logs WHERE id = ? AND user_id = ?
     ''', (log_id, current_user.id))
     
@@ -265,10 +413,51 @@ def view_log(log_id):
         'file_path': log_data[6],
         'audio_path': log_data[7],
         'transcript': log_data[8],
-        'verification_hash': log_data[9]
+        'verification_hash': log_data[9],
+        'ots_file_path': log_data[10],
+        'ots_status': log_data[11],
+        'ots_created_at': log_data[12],
+        'ots_confirmed_at': log_data[13]
     }
     
+    # Get timestamp info if available
+    if log['ots_file_path']:
+        log['ots_info'] = get_timestamp_info(log['ots_file_path'])
+    else:
+        log['ots_info'] = None
+    
     return render_template('log_details.html', log=log)
+
+@app.route('/check_timestamp/<int:log_id>')
+@login_required
+def check_timestamp(log_id):
+    """Check and update the status of a log's timestamp"""
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT ots_file_path FROM logs WHERE id = ? AND user_id = ?
+    ''', (log_id, current_user.id))
+    
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result or not result[0]:
+        flash('No timestamp found for this log')
+        return redirect(url_for('view_log', log_id=log_id))
+    
+    ots_file_path = result[0]
+    status = check_timestamp_status(log_id, current_user.id, ots_file_path)
+    
+    status_messages = {
+        'confirmed': 'Timestamp confirmed on Bitcoin blockchain!',
+        'pending': 'Timestamp is still pending blockchain confirmation',
+        'failed': 'Timestamp verification failed',
+        'missing': 'Timestamp file is missing',
+        'error': 'Error checking timestamp status'
+    }
+    
+    flash(status_messages.get(status, 'Unknown timestamp status'))
+    return redirect(url_for('view_log', log_id=log_id))
 
 @app.route('/uploads/<path:filename>')
 @login_required
@@ -294,7 +483,8 @@ def export_log(log_id):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT method, recipient, description, notes, timestamp, verification_hash
+        SELECT method, recipient, description, notes, timestamp, verification_hash,
+               ots_status, ots_created_at, ots_confirmed_at
         FROM logs WHERE id = ? AND user_id = ?
     ''', (log_id, current_user.id))
     
@@ -305,7 +495,30 @@ def export_log(log_id):
         flash('Log not found')
         return redirect(url_for('dashboard'))
     
-    # For now, return a simple text export
+    # Create comprehensive export with blockchain timestamp info
+    blockchain_status = log_data[6] or 'none'
+    blockchain_info = ""
+    
+    if blockchain_status == 'confirmed':
+        blockchain_info = f"""
+Blockchain Status: ✓ CONFIRMED on Bitcoin blockchain
+Timestamp Created: {log_data[7][:16] if log_data[7] else 'Unknown'}
+Blockchain Confirmed: {log_data[8][:16] if log_data[8] else 'Unknown'}
+Verification: Cryptographically proven via OpenTimestamps"""
+    elif blockchain_status == 'pending':
+        blockchain_info = f"""
+Blockchain Status: ⏳ PENDING blockchain confirmation
+Timestamp Created: {log_data[7][:16] if log_data[7] else 'Unknown'}
+Verification: Submitted to Bitcoin blockchain, awaiting confirmation"""
+    elif blockchain_status == 'failed':
+        blockchain_info = f"""
+Blockchain Status: ✗ FAILED
+Verification: Blockchain timestamping encountered an error"""
+    else:
+        blockchain_info = f"""
+Blockchain Status: - NONE
+Verification: No blockchain timestamp available"""
+
     export_text = f"""
 COMMUNICATION LOG EXPORT
 ========================
@@ -314,9 +527,14 @@ Recipient: {log_data[1]}
 Date/Time: {log_data[4]}
 Description: {log_data[2]}
 Notes: {log_data[3]}
-Verification Hash: {log_data[5]}
+Verification Hash: {log_data[5]}{blockchain_info}
 ========================
 Generated on: {datetime.now()}
+
+This export contains cryptographic proof of data integrity.
+The verification hash can be independently verified.
+Blockchain timestamps provide tamper-proof evidence of existence.
+Learn more: https://opentimestamps.org
     """
     
     from flask import Response
@@ -356,9 +574,35 @@ def init_db():
             audio_path TEXT,
             transcript TEXT,
             verification_hash TEXT NOT NULL,
+            ots_file_path TEXT,
+            ots_status TEXT DEFAULT 'pending',
+            ots_created_at DATETIME,
+            ots_confirmed_at DATETIME,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    
+    # Add OpenTimestamps columns to existing logs table if they don't exist
+    # (Only needed for existing databases that don't have these columns)
+    try:
+        cursor.execute('ALTER TABLE logs ADD COLUMN ots_file_path TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute('ALTER TABLE logs ADD COLUMN ots_status TEXT DEFAULT \'pending\'')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute('ALTER TABLE logs ADD COLUMN ots_created_at DATETIME')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute('ALTER TABLE logs ADD COLUMN ots_confirmed_at DATETIME')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()

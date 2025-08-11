@@ -89,5 +89,40 @@
             <p class="meta" style="margin-top: 4px;">This SHA256 hash can be used to verify the integrity of this log entry.</p>
         </div>
     </div>
+    
+    <div class="form-row">
+        <div class="field">
+            <label>Blockchain Timestamp:</label>
+            <div class="card" style="background: rgba(255,255,255,0.02); padding: 12px;">
+                {% if log.ots_status == 'confirmed' %}
+                    <p style="color: var(--accent); margin-bottom: 8px;">✓ <strong>Confirmed on Bitcoin Blockchain</strong></p>
+                    <p class="meta">Timestamp created: {{ log.ots_created_at[:16] if log.ots_created_at else 'Unknown' }}</p>
+                    <p class="meta">Blockchain confirmed: {{ log.ots_confirmed_at[:16] if log.ots_confirmed_at else 'Unknown' }}</p>
+                {% elif log.ots_status == 'pending' %}
+                    <p style="color: #fbbf24; margin-bottom: 8px;">⏳ <strong>Pending Blockchain Confirmation</strong></p>
+                    <p class="meta">Timestamp created: {{ log.ots_created_at[:16] if log.ots_created_at else 'Unknown' }}</p>
+                    <p class="meta">Waiting for Bitcoin blockchain confirmation (usually 1-6 hours)</p>
+                    <a href="{{ url_for('check_timestamp', log_id=log.id) }}" class="button secondary" style="margin-top: 8px;">Check Status</a>
+                {% elif log.ots_status == 'failed' %}
+                    <p style="color: #ef4444; margin-bottom: 8px;">✗ <strong>Timestamp Failed</strong></p>
+                    <p class="meta">There was an issue with the blockchain timestamp</p>
+                {% else %}
+                    <p style="color: var(--muted); margin-bottom: 8px;">- <strong>No Blockchain Timestamp</strong></p>
+                    <p class="meta">This log was created before blockchain timestamping was enabled</p>
+                {% endif %}
+                
+                {% if log.ots_info %}
+                <details style="margin-top: 12px;">
+                    <summary style="cursor: pointer; color: var(--accent);">View Technical Details</summary>
+                    <pre style="background: rgba(0,0,0,0.3); padding: 8px; margin-top: 8px; font-size: 0.8rem; overflow-x: auto;">{{ log.ots_info }}</pre>
+                </details>
+                {% endif %}
+            </div>
+            <p class="meta" style="margin-top: 4px;">
+                Blockchain timestamps provide cryptographic proof that this data existed at a specific time, 
+                anchored to the Bitcoin blockchain via <a href="https://opentimestamps.org" target="_blank" style="color: var(--accent);">OpenTimestamps</a>.
+            </p>
+        </div>
+    </div>
 </div>
 {% endblock %}
