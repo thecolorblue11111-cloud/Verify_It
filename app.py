@@ -4,7 +4,9 @@ import logging
 import subprocess
 import zipfile
 import tempfile
+import json
 from datetime import datetime
+from functools import wraps
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request, Response
@@ -234,6 +236,213 @@ def get_timestamp_info(ots_file_path):
     except Exception as e:
         logging.error(f"Failed to get timestamp info: {e}")
         return None
+
+# Audit Logging System
+def get_client_ip():
+    """Get the client's IP address, handling proxies"""
+    if request.environ.get('HTTP_X_FORWARDED_FOR'):
+        return request.environ['HTTP_X_FORWARDED_FOR'].split(',')[0].strip()
+    elif request.environ.get('HTTP_X_REAL_IP'):
+        return request.environ['HTTP_X_REAL_IP']
+    else:
+        return request.environ.get('REMOTE_ADDR', 'unknown')
+
+def get_user_agent():
+    """Get the client's user agent"""
+    return request.headers.get('User-Agent', 'unknown')
+
+def create_audit_log(action, resource_type, resource_id=None, details=None, user_id=None, status='success'):
+    """Create an audit log entry with tamper protection"""
+    try:
+        # Use current user if not specified
+        if user_id is None and current_user.is_authenticated:
+            user_id = current_user.id
+        
+        # Get the previous audit log hash for chaining
+        with sqlite3.connect('database.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT hash FROM audit_logs ORDER BY id DESC LIMIT 1')
+            previous_hash = cursor.fetchone()
+            previous_hash = previous_hash[0] if previous_hash else '0'
+            
+            # Create audit log entry
+            timestamp = datetime.now()
+            ip_address = get_client_ip()
+            user_agent = get_user_agent()
+            
+            # Create hash for tamper detection (chain with previous hash)
+            # Use string representation to match SQLite storage format
+            timestamp_str = str(timestamp)
+            hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp_str}{ip_address}{previous_hash}"
+            if details:
+                hash_data += json.dumps(details, sort_keys=True)
+            
+            audit_hash = hashlib.sha256(hash_data.encode()).hexdigest()
+            
+            # Store audit log (use same JSON format as hash for consistency)
+            details_json = json.dumps(details, sort_keys=True) if details else None
+            cursor.execute('''
+                INSERT INTO audit_logs (user_id, action, resource_type, resource_id, 
+                                      details, ip_address, user_agent, timestamp, 
+                                      status, hash, previous_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, action, resource_type, resource_id, details_json,
+                  ip_address, user_agent, timestamp, status, audit_hash, previous_hash))
+            
+            conn.commit()
+        
+        logging.info(f"Audit log created: {action} on {resource_type} by user {user_id}")
+        return True
+        
+    except Exception as e:
+        logging.error(f"Failed to create audit log: {e}")
+        return False
+
+def verify_audit_chain():
+    """Verify the integrity of the audit log chain"""
+    try:
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, user_id, action, resource_type, resource_id, details, 
+                   ip_address, timestamp, hash, previous_hash
+            FROM audit_logs ORDER BY id ASC
+        ''')
+        
+        logs = cursor.fetchall()
+        conn.close()
+        
+        if not logs:
+            return True, "No audit logs to verify"
+        
+        expected_previous = '0'
+        for log in logs:
+            log_id, user_id, action, resource_type, resource_id, details, ip_address, timestamp, stored_hash, previous_hash = log
+            
+            # Verify previous hash chain
+            if previous_hash != expected_previous:
+                return False, f"Hash chain broken at log ID {log_id}"
+            
+            # Recalculate hash using same format as creation
+            hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp}{ip_address}{previous_hash}"
+            if details:
+                # Details are already stored with sort_keys=True
+                hash_data += details
+            
+            calculated_hash = hashlib.sha256(hash_data.encode()).hexdigest()
+            
+            if calculated_hash != stored_hash:
+                return False, f"Hash mismatch at log ID {log_id} - possible tampering detected"
+            
+            expected_previous = stored_hash
+        
+        return True, f"Audit chain verified successfully ({len(logs)} entries)"
+        
+    except Exception as e:
+        logging.error(f"Audit chain verification failed: {e}")
+        return False, f"Verification error: {str(e)}"
+
+def audit_required(action, resource_type):
+    """Decorator to automatically create audit logs for route functions"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Extract resource_id from kwargs if present
+            resource_id = kwargs.get('log_id') or kwargs.get('id') or kwargs.get('user_id')
+            
+            try:
+                # Execute the original function
+                result = f(*args, **kwargs)
+                
+                # Create audit log for successful action
+                create_audit_log(
+                    action=action,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    details={
+                        'method': request.method,
+                        'endpoint': request.endpoint,
+                        'args': dict(request.args),
+                        'form_keys': list(request.form.keys()) if request.form else []
+                    },
+                    status='success'
+                )
+                
+                return result
+                
+            except Exception as e:
+                # Create audit log for failed action
+                create_audit_log(
+                    action=action,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    details={
+                        'method': request.method,
+                        'endpoint': request.endpoint,
+                        'error': str(e)
+                    },
+                    status='failure'
+                )
+                raise
+        
+        return decorated_function
+    return decorator
+
+def detect_suspicious_activity():
+    """Detect potentially suspicious patterns in audit logs"""
+    try:
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        
+        # Check for multiple failed login attempts
+        cursor.execute('''
+            SELECT ip_address, COUNT(*) as attempts
+            FROM audit_logs 
+            WHERE action = 'login' AND status = 'failure' 
+            AND timestamp > datetime('now', '-1 hour')
+            GROUP BY ip_address
+            HAVING attempts >= 5
+        ''')
+        
+        suspicious_ips = cursor.fetchall()
+        
+        # Check for unusual access patterns
+        cursor.execute('''
+            SELECT user_id, COUNT(DISTINCT ip_address) as ip_count
+            FROM audit_logs 
+            WHERE timestamp > datetime('now', '-1 hour')
+            AND user_id IS NOT NULL
+            GROUP BY user_id
+            HAVING ip_count >= 3
+        ''')
+        
+        multi_ip_users = cursor.fetchall()
+        
+        conn.close()
+        
+        alerts = []
+        
+        for ip, attempts in suspicious_ips:
+            alerts.append({
+                'type': 'multiple_failed_logins',
+                'ip_address': ip,
+                'attempts': attempts,
+                'severity': 'high'
+            })
+        
+        for user_id, ip_count in multi_ip_users:
+            alerts.append({
+                'type': 'multiple_ip_access',
+                'user_id': user_id,
+                'ip_count': ip_count,
+                'severity': 'medium'
+            })
+        
+        return alerts
+        
+    except Exception as e:
+        logging.error(f"Suspicious activity detection failed: {e}")
+        return []
 
 def generate_pdf_export(log_data, log_id, user_id):
     """Generate a comprehensive PDF export for a log"""
@@ -518,8 +727,19 @@ def register():
             VALUES (?, ?, ?, ?)
         ''', (username, email, password_hash, datetime.now()))
         
+        user_id = cursor.lastrowid
         conn.commit()
         conn.close()
+        
+        # Create audit log for successful registration
+        create_audit_log(
+            action='register',
+            resource_type='user',
+            resource_id=user_id,
+            details={'username': username, 'email': email},
+            user_id=user_id,
+            status='success'
+        )
         
         flash('Registration successful! Please log in.')
         return redirect(url_for('login'))
@@ -541,8 +761,27 @@ def login():
         if user_data and check_password_hash(user_data[2], password):
             user = User(user_data[0], user_data[1])
             login_user(user)
+            
+            # Create audit log for successful login
+            create_audit_log(
+                action='login',
+                resource_type='user',
+                resource_id=user_data[0],
+                details={'username': username},
+                user_id=user_data[0],
+                status='success'
+            )
+            
             return redirect(url_for('dashboard'))
         else:
+            # Create audit log for failed login attempt
+            create_audit_log(
+                action='login',
+                resource_type='user',
+                details={'username': username, 'reason': 'invalid_credentials'},
+                user_id=None,
+                status='failure'
+            )
             flash('Invalid username or password')
     
     return render_template('login.html')
@@ -550,11 +789,20 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    # Create audit log for logout
+    create_audit_log(
+        action='logout',
+        resource_type='user',
+        resource_id=current_user.id,
+        status='success'
+    )
+    
     logout_user()
     return redirect(url_for('index'))
 
 @app.route('/dashboard')
 @login_required
+@audit_required('view', 'dashboard')
 def dashboard():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
@@ -587,6 +835,7 @@ def new_log():
 
 @app.route('/create_log', methods=['POST'])
 @login_required
+@audit_required('create', 'log')
 def create_log():
     method = request.form.get('method')
     recipient = request.form.get('recipient')
@@ -677,6 +926,7 @@ def create_log():
 
 @app.route('/log/<int:log_id>')
 @login_required
+@audit_required('view', 'log')
 def view_log(log_id):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
@@ -809,6 +1059,7 @@ def export_log(log_id):
 
 @app.route('/export_log/<int:log_id>/text')
 @login_required
+@audit_required('export', 'log')
 def export_log_text(log_id):
     """Export log as text file"""
     log_data = get_log_data_for_export(log_id, current_user.id)
@@ -869,6 +1120,7 @@ Learn more: https://opentimestamps.org
 
 @app.route('/export_log/<int:log_id>/pdf')
 @login_required
+@audit_required('export', 'log')
 def export_log_pdf(log_id):
     """Export log as PDF file"""
     log_data = get_log_data_for_export(log_id, current_user.id)
@@ -898,6 +1150,7 @@ def export_log_pdf(log_id):
 
 @app.route('/export_log/<int:log_id>/zip')
 @login_required
+@audit_required('export', 'log')
 def export_log_zip(log_id):
     """Export log as ZIP file with all evidence"""
     log_data = get_log_data_for_export(log_id, current_user.id)
@@ -924,6 +1177,191 @@ def export_log_zip(log_id):
         download_name=f'log_{log_id}_evidence_package.zip',
         mimetype='application/zip'
     )
+
+# Admin routes for audit log management
+@app.route('/admin/audit_logs')
+@login_required
+def admin_audit_logs():
+    """Admin interface for viewing audit logs"""
+    # For now, allow any authenticated user to view audit logs
+    # In production, you might want to add role-based access control
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    offset = (page - 1) * per_page
+    
+    # Get filter parameters
+    action_filter = request.args.get('action', '')
+    user_filter = request.args.get('user', '')
+    status_filter = request.args.get('status', '')
+    
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    
+    # Build query with filters
+    where_conditions = []
+    params = []
+    
+    if action_filter:
+        where_conditions.append('action = ?')
+        params.append(action_filter)
+    
+    if user_filter:
+        where_conditions.append('user_id = ?')
+        params.append(user_filter)
+    
+    if status_filter:
+        where_conditions.append('status = ?')
+        params.append(status_filter)
+    
+    where_clause = ' WHERE ' + ' AND '.join(where_conditions) if where_conditions else ''
+    
+    # Get audit logs with pagination
+    cursor.execute(f'''
+        SELECT a.id, a.user_id, u.username, a.action, a.resource_type, 
+               a.resource_id, a.ip_address, a.timestamp, a.status, a.details
+        FROM audit_logs a
+        LEFT JOIN users u ON a.user_id = u.id
+        {where_clause}
+        ORDER BY a.timestamp DESC
+        LIMIT ? OFFSET ?
+    ''', params + [per_page, offset])
+    
+    audit_logs = cursor.fetchall()
+    
+    # Get total count for pagination
+    cursor.execute(f'''
+        SELECT COUNT(*) FROM audit_logs a
+        LEFT JOIN users u ON a.user_id = u.id
+        {where_clause}
+    ''', params)
+    
+    total_count = cursor.fetchone()[0]
+    
+    # Get unique actions for filter dropdown
+    cursor.execute('SELECT DISTINCT action FROM audit_logs ORDER BY action')
+    actions = [row[0] for row in cursor.fetchall()]
+    
+    # Get users for filter dropdown
+    cursor.execute('SELECT id, username FROM users ORDER BY username')
+    users = cursor.fetchall()
+    
+    conn.close()
+    
+    # Convert to list of dictionaries
+    log_list = []
+    for log in audit_logs:
+        details = json.loads(log[9]) if log[9] else {}
+        log_list.append({
+            'id': log[0],
+            'user_id': log[1],
+            'username': log[2] or 'Anonymous',
+            'action': log[3],
+            'resource_type': log[4],
+            'resource_id': log[5],
+            'ip_address': log[6],
+            'timestamp': log[7],
+            'status': log[8],
+            'details': details
+        })
+    
+    # Calculate pagination info
+    total_pages = (total_count + per_page - 1) // per_page
+    has_prev = page > 1
+    has_next = page < total_pages
+    
+    # Build pagination parameters for template
+    current_filters = {
+        'action': action_filter,
+        'user': user_filter,
+        'status': status_filter
+    }
+    
+    # Remove empty filters for cleaner URLs
+    pagination_filters = {k: v for k, v in current_filters.items() if v}
+    
+    return render_template('admin/audit_logs.html', 
+                         audit_logs=log_list,
+                         page=page,
+                         total_pages=total_pages,
+                         has_prev=has_prev,
+                         has_next=has_next,
+                         actions=actions,
+                         users=users,
+                         current_filters=current_filters,
+                         pagination_filters=pagination_filters)
+
+@app.route('/admin/audit_verify')
+@login_required
+def admin_audit_verify():
+    """Verify the integrity of the audit log chain"""
+    create_audit_log(
+        action='verify_audit_chain',
+        resource_type='audit_logs',
+        status='success'
+    )
+    
+    is_valid, message = verify_audit_chain()
+    
+    if is_valid:
+        flash(f'✅ {message}', 'success')
+    else:
+        flash(f'❌ {message}', 'error')
+    
+    return redirect(url_for('admin_audit_logs'))
+
+@app.route('/admin/security_alerts')
+@login_required
+def admin_security_alerts():
+    """View security alerts and suspicious activity"""
+    create_audit_log(
+        action='view_security_alerts',
+        resource_type='security',
+        status='success'
+    )
+    
+    alerts = detect_suspicious_activity()
+    
+    return render_template('admin/security_alerts.html', alerts=alerts)
+
+@app.route('/api/audit_log/<int:log_id>')
+@login_required
+def api_audit_log_details(log_id):
+    """API endpoint to get detailed audit log information"""
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT a.id, a.user_id, u.username, a.action, a.resource_type, 
+               a.resource_id, a.details, a.ip_address, a.user_agent, 
+               a.timestamp, a.status, a.hash, a.previous_hash
+        FROM audit_logs a
+        LEFT JOIN users u ON a.user_id = u.id
+        WHERE a.id = ?
+    ''', (log_id,))
+    
+    log_data = cursor.fetchone()
+    conn.close()
+    
+    if not log_data:
+        return jsonify({'error': 'Audit log not found'}), 404
+    
+    details = json.loads(log_data[6]) if log_data[6] else {}
+    
+    return jsonify({
+        'id': log_data[0],
+        'user_id': log_data[1],
+        'username': log_data[2] or 'Anonymous',
+        'action': log_data[3],
+        'resource_type': log_data[4],
+        'resource_id': log_data[5],
+        'details': details,
+        'ip_address': log_data[7],
+        'user_agent': log_data[8],
+        'timestamp': log_data[9],
+        'status': log_data[10],
+        'hash': log_data[11],
+        'previous_hash': log_data[12]
+    })
 
 def init_db():
     """Initialize the database with required tables"""
@@ -984,6 +1422,38 @@ def init_db():
         cursor.execute('ALTER TABLE logs ADD COLUMN ots_confirmed_at DATETIME')
     except sqlite3.OperationalError:
         pass  # Column already exists
+    
+    # Create audit_logs table for tamper-proof activity tracking
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER,
+            details TEXT,
+            ip_address TEXT NOT NULL,
+            user_agent TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'success',
+            hash TEXT NOT NULL,
+            previous_hash TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    
+    # Create index for efficient audit log queries
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)
+    ''')
     
     conn.commit()
     conn.close()

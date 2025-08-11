@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Logs - Verify_It Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .admin-header {
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+            color: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .filters {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filters select, .filters input {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            color: inherit;
+        }
+        
+        .audit-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .audit-table th {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .audit-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            vertical-align: top;
+        }
+        
+        .audit-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .status-success {
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .status-failure {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        
+        .action-badge {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .resource-badge {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .pagination a, .pagination span {
+            padding: 8px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: inherit;
+        }
+        
+        .pagination .current {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .details-btn {
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        
+        .details-btn:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
+        
+        .admin-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .verify-btn {
+            background: #10b981;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .verify-btn:hover {
+            background: #059669;
+        }
+        
+        .alerts-btn {
+            background: #f59e0b;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        
+        .alerts-btn:hover {
+            background: #d97706;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="admin-header">
+            <h1>🔒 Audit Logs Administration</h1>
+            <p>Comprehensive activity tracking and tamper detection system</p>
+        </div>
+        
+        <div class="admin-actions">
+            <a href="{{ url_for('admin_audit_verify') }}" class="verify-btn">🔍 Verify Chain Integrity</a>
+            <a href="{{ url_for('admin_security_alerts') }}" class="alerts-btn">⚠️ Security Alerts</a>
+            <a href="{{ url_for('dashboard') }}" class="button secondary">← Back to Dashboard</a>
+        </div>
+        
+        <!-- Filters -->
+        <form method="GET" class="filters">
+            <label>
+                Action:
+                <select name="action">
+                    <option value="">All Actions</option>
+                    {% for action in actions %}
+                    <option value="{{ action }}" {% if current_filters.action == action %}selected{% endif %}>
+                        {{ action }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            
+            <label>
+                User:
+                <select name="user">
+                    <option value="">All Users</option>
+                    {% for user_id, username in users %}
+                    <option value="{{ user_id }}" {% if current_filters.user == (user_id ~ '') %}selected{% endif %}>
+                        {{ username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            
+            <label>
+                Status:
+                <select name="status">
+                    <option value="">All Status</option>
+                    <option value="success" {% if current_filters.status == 'success' %}selected{% endif %}>Success</option>
+                    <option value="failure" {% if current_filters.status == 'failure' %}selected{% endif %}>Failure</option>
+                </select>
+            </label>
+            
+            <button type="submit" class="button">Filter</button>
+            <a href="{{ url_for('admin_audit_logs') }}" class="button secondary">Clear</a>
+        </form>
+        
+        <!-- Audit Logs Table -->
+        <table class="audit-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Timestamp</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Resource</th>
+                    <th>IP Address</th>
+                    <th>Status</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in audit_logs %}
+                <tr>
+                    <td>{{ log.id }}</td>
+                    <td>{{ log.timestamp[:19] }}</td>
+                    <td>{{ log.username }}</td>
+                    <td><span class="action-badge">{{ log.action }}</span></td>
+                    <td>
+                        <span class="resource-badge">{{ log.resource_type }}</span>
+                        {% if log.resource_id %}#{{ log.resource_id }}{% endif %}
+                    </td>
+                    <td>{{ log.ip_address }}</td>
+                    <td>
+                        <span class="status-{{ log.status }}">{{ log.status.title() }}</span>
+                    </td>
+                    <td>
+                        {% if log.details %}
+                        <button class="details-btn" onclick="showDetails({{ log.id }})">View Details</button>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination">
+            {% if has_prev %}
+            <a href="{{ url_for('admin_audit_logs', page=page-1, action=current_filters.action, user=current_filters.user, status=current_filters.status) }}">← Previous</a>
+            {% endif %}
+            
+            {% for p in range(1, total_pages + 1) %}
+                {% if p == page %}
+                <span class="current">{{ p }}</span>
+                {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
+                <a href="{{ url_for('admin_audit_logs', page=p, action=current_filters.action, user=current_filters.user, status=current_filters.status) }}">{{ p }}</a>
+                {% elif p == 4 or p == total_pages - 3 %}
+                <span>...</span>
+                {% endif %}
+            {% endfor %}
+            
+            {% if has_next %}
+            <a href="{{ url_for('admin_audit_logs', page=page+1, action=current_filters.action, user=current_filters.user, status=current_filters.status) }}">Next →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Details Modal -->
+    <div id="detailsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1f2937; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80%; overflow-y: auto;">
+            <h3>Audit Log Details</h3>
+            <div id="detailsContent"></div>
+            <button onclick="closeDetails()" class="button" style="margin-top: 15px;">Close</button>
+        </div>
+    </div>
+    
+    <script>
+        function showDetails(logId) {
+            fetch(`/api/audit_log/${logId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const content = `
+                        <p><strong>ID:</strong> ${data.id}</p>
+                        <p><strong>User:</strong> ${data.username} (ID: ${data.user_id || 'N/A'})</p>
+                        <p><strong>Action:</strong> ${data.action}</p>
+                        <p><strong>Resource:</strong> ${data.resource_type} ${data.resource_id ? '#' + data.resource_id : ''}</p>
+                        <p><strong>IP Address:</strong> ${data.ip_address}</p>
+                        <p><strong>User Agent:</strong> ${data.user_agent || 'N/A'}</p>
+                        <p><strong>Timestamp:</strong> ${data.timestamp}</p>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Hash:</strong> <code style="font-size: 0.8em; word-break: break-all;">${data.hash}</code></p>
+                        <p><strong>Previous Hash:</strong> <code style="font-size: 0.8em; word-break: break-all;">${data.previous_hash}</code></p>
+                        <p><strong>Details:</strong></p>
+                        <pre style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 0.9em;">${JSON.stringify(data.details, null, 2)}</pre>
+                    `;
+                    document.getElementById('detailsContent').innerHTML = content;
+                    document.getElementById('detailsModal').style.display = 'block';
+                })
+                .catch(error => {
+                    alert('Error loading details: ' + error);
+                });
+        }
+        
+        function closeDetails() {
+            document.getElementById('detailsModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('detailsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDetails();
+            }
+        });
+    </script>
+</body>
+</html>
