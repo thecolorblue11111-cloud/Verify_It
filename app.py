@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import sqlite3
 import speech_recognition as sr
@@ -861,7 +861,6 @@ Blockchain timestamps provide tamper-proof evidence of existence.
 Learn more: https://opentimestamps.org
     """
     
-    from flask import Response
     return Response(
         export_text,
         mimetype='text/plain',
