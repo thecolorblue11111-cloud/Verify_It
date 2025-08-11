@@ -100,10 +100,29 @@ def create_opentimestamp(data_hash, log_id, user_id):
                 return False
         else:
             logging.error(f"OTS stamp failed for log {log_id}: {result.stderr}")
+            # Mark as failed in database
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', ('failed', log_id, user_id))
+            conn.commit()
+            conn.close()
             return False
             
     except Exception as e:
         logging.error(f"OpenTimestamp creation failed for log {log_id}: {e}")
+        # Mark as failed in database
+        try:
+            conn = sqlite3.connect('database.db')
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', ('failed', log_id, user_id))
+            conn.commit()
+            conn.close()
+        except Exception as db_e:
+            logging.error(f"Failed to update database status for log {log_id}: {db_e}")
         return False
 
 def check_timestamp_status(log_id, user_id, ots_file_path):
@@ -126,21 +145,30 @@ def check_timestamp_status(log_id, user_id, ots_file_path):
                                      capture_output=True, text=True, timeout=30)
         
         status = 'pending'
+        confirmed_at = None
+        
         if verify_result.returncode == 0 and 'Success!' in verify_result.stdout:
             status = 'confirmed'
-            # Update database with confirmation
-            conn = sqlite3.connect('database.db')
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE logs SET ots_status = ?, ots_confirmed_at = ?
-                WHERE id = ? AND user_id = ?
-            ''', (status, datetime.now(), log_id, user_id))
-            conn.commit()
-            conn.close()
+            confirmed_at = datetime.now()
         elif 'Pending' in verify_result.stdout:
             status = 'pending'
         else:
             status = 'failed'
+        
+        # Update database with current status
+        conn = sqlite3.connect('database.db')
+        cursor = conn.cursor()
+        if confirmed_at:
+            cursor.execute('''
+                UPDATE logs SET ots_status = ?, ots_confirmed_at = ?
+                WHERE id = ? AND user_id = ?
+            ''', (status, confirmed_at, log_id, user_id))
+        else:
+            cursor.execute('''
+                UPDATE logs SET ots_status = ? WHERE id = ? AND user_id = ?
+            ''', (status, log_id, user_id))
+        conn.commit()
+        conn.close()
             
         return status
         
@@ -345,8 +373,11 @@ def create_log():
     
     # Create OpenTimestamp for the log
     try:
-        create_opentimestamp(verification_hash, log_id, current_user.id)
-        flash('Log created successfully with blockchain timestamp!')
+        success = create_opentimestamp(verification_hash, log_id, current_user.id)
+        if success:
+            flash('Log created successfully with blockchain timestamp!')
+        else:
+            flash('Log created successfully, but blockchain timestamping failed.')
     except Exception as e:
         logging.error(f"Failed to create timestamp for log {log_id}: {e}")
         flash('Log created successfully, but blockchain timestamping failed.')
