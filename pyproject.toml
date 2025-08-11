@@ -15,4 +15,7 @@ dependencies = [
     "pyaudio>=0.2.14",
     "pydub>=0.25.1",
     "opentimestamps-client>=0.7.0",
+    "reportlab>=4.0.0",
+    "pillow>=10.0.0",
+    "qrcode[pil]>=7.0.0",
 ]
