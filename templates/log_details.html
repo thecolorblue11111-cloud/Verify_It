@@ -7,8 +7,15 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2>Log Details</h2>
         <div>
-            <a href="{{ url_for('export_log', log_id=log.id) }}" class="button secondary">Export</a>
-            <a href="{{ url_for('dashboard') }}" class="button secondary" style="margin-left: 8px;">Back</a>
+            <div style="display: inline-block; margin-right: 8px;">
+                <select onchange="if(this.value) window.location.href=this.value" class="button secondary" style="padding: 8px 12px; border: none; cursor: pointer;">
+                    <option value="">📤 Export Options</option>
+                    <option value="{{ url_for('export_log_text', log_id=log.id) }}">📄 Text File</option>
+                    <option value="{{ url_for('export_log_pdf', log_id=log.id) }}">📋 PDF Report</option>
+                    <option value="{{ url_for('export_log_zip', log_id=log.id) }}">📦 Complete Evidence Package</option>
+                </select>
+            </div>
+            <a href="{{ url_for('dashboard') }}" class="button secondary">Back</a>
         </div>
     </div>
     

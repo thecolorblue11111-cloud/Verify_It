@@ -42,7 +42,14 @@
                     </td>
                     <td>
                         <a href="{{ url_for('view_log', log_id=log.id) }}">View</a>
-                        <a href="{{ url_for('export_log', log_id=log.id) }}" style="margin-left: 8px;">Export</a>
+                        <div style="display: inline-block; margin-left: 8px;">
+                            <select onchange="if(this.value) window.location.href=this.value" style="padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit; font-size: 0.85rem;">
+                                <option value="">Export...</option>
+                                <option value="{{ url_for('export_log_text', log_id=log.id) }}">📄 Text</option>
+                                <option value="{{ url_for('export_log_pdf', log_id=log.id) }}">📋 PDF Report</option>
+                                <option value="{{ url_for('export_log_zip', log_id=log.id) }}">📦 ZIP Package</option>
+                            </select>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

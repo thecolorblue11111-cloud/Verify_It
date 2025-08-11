@@ -2,6 +2,8 @@ import os
 import hashlib
 import logging
 import subprocess
+import zipfile
+import tempfile
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,7 +13,14 @@ import sqlite3
 import speech_recognition as sr
 import io
 import wave
-import tempfile
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+import qrcode
+from PIL import Image
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -193,6 +202,247 @@ def get_timestamp_info(ots_file_path):
             
     except Exception as e:
         logging.error(f"Failed to get timestamp info: {e}")
+        return None
+
+def generate_pdf_export(log_data, log_id, user_id):
+    """Generate a comprehensive PDF export for a log"""
+    try:
+        # Create temporary file for PDF
+        temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        temp_pdf.close()
+        
+        # Create PDF document
+        doc = SimpleDocTemplate(temp_pdf.name, pagesize=A4,
+                              rightMargin=72, leftMargin=72,
+                              topMargin=72, bottomMargin=18)
+        
+        # Get styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#2563eb')
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            spaceAfter=12,
+            textColor=colors.HexColor('#1f2937')
+        )
+        
+        # Build PDF content
+        story = []
+        
+        # Title
+        story.append(Paragraph("COMMUNICATION LOG REPORT", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Basic Information Table
+        basic_data = [
+            ['Method:', log_data['method']],
+            ['Recipient:', log_data['recipient']],
+            ['Date/Time:', log_data['timestamp']],
+            ['Log ID:', str(log_id)]
+        ]
+        
+        basic_table = Table(basic_data, colWidths=[2*inch, 4*inch])
+        basic_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        
+        story.append(basic_table)
+        story.append(Spacer(1, 20))
+        
+        # Description
+        story.append(Paragraph("Description", heading_style))
+        story.append(Paragraph(log_data['description'], styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Notes (if any)
+        if log_data['notes']:
+            story.append(Paragraph("Notes", heading_style))
+            story.append(Paragraph(log_data['notes'], styles['Normal']))
+            story.append(Spacer(1, 15))
+        
+        # Transcript (if any)
+        if log_data['transcript']:
+            story.append(Paragraph("Audio Transcript", heading_style))
+            story.append(Paragraph(log_data['transcript'], styles['Normal']))
+            story.append(Spacer(1, 15))
+        
+        # Verification Information
+        story.append(Paragraph("Cryptographic Verification", heading_style))
+        
+        verification_data = [
+            ['Verification Hash:', log_data['verification_hash']],
+        ]
+        
+        # Add blockchain information
+        blockchain_status = log_data.get('ots_status', 'none')
+        if blockchain_status == 'confirmed':
+            verification_data.extend([
+                ['Blockchain Status:', '✓ CONFIRMED on Bitcoin blockchain'],
+                ['Timestamp Created:', log_data.get('ots_created_at', 'Unknown')[:16] if log_data.get('ots_created_at') else 'Unknown'],
+                ['Blockchain Confirmed:', log_data.get('ots_confirmed_at', 'Unknown')[:16] if log_data.get('ots_confirmed_at') else 'Unknown'],
+            ])
+        elif blockchain_status == 'pending':
+            verification_data.extend([
+                ['Blockchain Status:', '⏳ PENDING blockchain confirmation'],
+                ['Timestamp Created:', log_data.get('ots_created_at', 'Unknown')[:16] if log_data.get('ots_created_at') else 'Unknown'],
+            ])
+        elif blockchain_status == 'failed':
+            verification_data.append(['Blockchain Status:', '✗ FAILED'])
+        else:
+            verification_data.append(['Blockchain Status:', '- NONE'])
+        
+        verification_table = Table(verification_data, colWidths=[2*inch, 4*inch])
+        verification_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        
+        story.append(verification_table)
+        story.append(Spacer(1, 20))
+        
+        # Generate QR code for verification
+        qr_data = f"Log ID: {log_id}\nHash: {log_data['verification_hash']}\nGenerated: {datetime.now().isoformat()}"
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        qr_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        qr_img.save(qr_temp.name)
+        qr_temp.close()
+        
+        # Add QR code to PDF
+        story.append(Paragraph("Verification QR Code", heading_style))
+        story.append(RLImage(qr_temp.name, width=1.5*inch, height=1.5*inch))
+        story.append(Spacer(1, 15))
+        
+        # Footer information
+        story.append(Spacer(1, 20))
+        footer_style = ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=8,
+            textColor=colors.HexColor('#6b7280'),
+            alignment=TA_CENTER
+        )
+        
+        story.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", footer_style))
+        story.append(Paragraph("This document contains cryptographic proof of data integrity.", footer_style))
+        story.append(Paragraph("Blockchain timestamps provide tamper-proof evidence via OpenTimestamps.org", footer_style))
+        
+        # Build PDF
+        doc.build(story)
+        
+        # Clean up QR code temp file
+        os.unlink(qr_temp.name)
+        
+        return temp_pdf.name
+        
+    except Exception as e:
+        logging.error(f"PDF generation failed: {e}")
+        return None
+
+def generate_zip_export(log_data, log_id, user_id):
+    """Generate a comprehensive ZIP export with all evidence files"""
+    try:
+        # Create temporary file for ZIP
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        temp_zip.close()
+        
+        with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add PDF report
+            pdf_path = generate_pdf_export(log_data, log_id, user_id)
+            if pdf_path:
+                zipf.write(pdf_path, f"log_{log_id}_report.pdf")
+                os.unlink(pdf_path)  # Clean up temp PDF
+            
+            # Add evidence files
+            if log_data.get('file_path'):
+                file_full_path = os.path.join(UPLOAD_FOLDER, log_data['file_path'])
+                if os.path.exists(file_full_path):
+                    # Get original filename
+                    original_name = os.path.basename(log_data['file_path'])
+                    zipf.write(file_full_path, f"evidence/{original_name}")
+            
+            # Add audio files
+            if log_data.get('audio_path'):
+                audio_full_path = os.path.join(UPLOAD_FOLDER, log_data['audio_path'])
+                if os.path.exists(audio_full_path):
+                    original_name = os.path.basename(log_data['audio_path'])
+                    zipf.write(audio_full_path, f"audio/{original_name}")
+            
+            # Add timestamp proof file
+            if log_data.get('ots_file_path'):
+                ots_full_path = os.path.join(UPLOAD_FOLDER, log_data['ots_file_path'])
+                if os.path.exists(ots_full_path):
+                    zipf.write(ots_full_path, f"blockchain/log_{log_id}_timestamp.ots")
+                
+                # Add the hash file too
+                hash_file_path = ots_full_path.replace('.ots', '')
+                if os.path.exists(hash_file_path):
+                    zipf.write(hash_file_path, f"blockchain/log_{log_id}_hash.txt")
+            
+            # Create verification instructions
+            instructions = f"""VERIFICATION INSTRUCTIONS
+========================
+
+This package contains complete evidence for Communication Log #{log_id}
+
+CONTENTS:
+- log_{log_id}_report.pdf: Comprehensive formatted report
+- evidence/: Original uploaded files
+- audio/: Audio recordings
+- blockchain/: OpenTimestamps blockchain proof files
+
+VERIFICATION STEPS:
+
+1. HASH VERIFICATION:
+   - The verification hash is: {log_data['verification_hash']}
+   - This SHA256 hash proves data integrity
+
+2. BLOCKCHAIN VERIFICATION (if available):
+   - Install OpenTimestamps client: pip install opentimestamps-client
+   - Verify timestamp: ots verify blockchain/log_{log_id}_timestamp.ots
+   - This proves the data existed at the recorded time
+
+3. INDEPENDENT VERIFICATION:
+   - All files can be independently verified
+   - Hash can be recalculated from original data
+   - Blockchain proof is publicly verifiable
+
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+System: Verify_It Communication Logger
+Learn more: https://opentimestamps.org
+"""
+            
+            zipf.writestr("README.txt", instructions)
+        
+        return temp_zip.name
+        
+    except Exception as e:
+        logging.error(f"ZIP generation failed: {e}")
         return None
 
 @app.route('/')
@@ -476,39 +726,69 @@ def uploaded_file(filename):
     
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-@app.route('/export_log/<int:log_id>')
-@login_required
-def export_log(log_id):
-    # Simple implementation - in production, would generate proper PDF/ZIP
+def get_log_data_for_export(log_id, user_id):
+    """Helper function to get complete log data for export"""
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT method, recipient, description, notes, timestamp, verification_hash,
-               ots_status, ots_created_at, ots_confirmed_at
+        SELECT id, method, recipient, description, notes, timestamp,
+               file_path, audio_path, transcript, verification_hash,
+               ots_file_path, ots_status, ots_created_at, ots_confirmed_at
         FROM logs WHERE id = ? AND user_id = ?
-    ''', (log_id, current_user.id))
+    ''', (log_id, user_id))
     
     log_data = cursor.fetchone()
     conn.close()
     
     if not log_data:
+        return None
+    
+    return {
+        'id': log_data[0],
+        'method': log_data[1],
+        'recipient': log_data[2],
+        'description': log_data[3],
+        'notes': log_data[4],
+        'timestamp': log_data[5],
+        'file_path': log_data[6],
+        'audio_path': log_data[7],
+        'transcript': log_data[8],
+        'verification_hash': log_data[9],
+        'ots_file_path': log_data[10],
+        'ots_status': log_data[11],
+        'ots_created_at': log_data[12],
+        'ots_confirmed_at': log_data[13]
+    }
+
+@app.route('/export_log/<int:log_id>')
+@login_required
+def export_log(log_id):
+    """Default export - redirect to text export for backward compatibility"""
+    return redirect(url_for('export_log_text', log_id=log_id))
+
+@app.route('/export_log/<int:log_id>/text')
+@login_required
+def export_log_text(log_id):
+    """Export log as text file"""
+    log_data = get_log_data_for_export(log_id, current_user.id)
+    if not log_data:
         flash('Log not found')
         return redirect(url_for('dashboard'))
     
     # Create comprehensive export with blockchain timestamp info
-    blockchain_status = log_data[6] or 'none'
+    blockchain_status = log_data.get('ots_status', 'none')
     blockchain_info = ""
     
     if blockchain_status == 'confirmed':
         blockchain_info = f"""
 Blockchain Status: ✓ CONFIRMED on Bitcoin blockchain
-Timestamp Created: {log_data[7][:16] if log_data[7] else 'Unknown'}
-Blockchain Confirmed: {log_data[8][:16] if log_data[8] else 'Unknown'}
+Timestamp Created: {log_data.get('ots_created_at', 'Unknown')[:16] if log_data.get('ots_created_at') else 'Unknown'}
+Blockchain Confirmed: {log_data.get('ots_confirmed_at', 'Unknown')[:16] if log_data.get('ots_confirmed_at') else 'Unknown'}
 Verification: Cryptographically proven via OpenTimestamps"""
     elif blockchain_status == 'pending':
         blockchain_info = f"""
 Blockchain Status: ⏳ PENDING blockchain confirmation
-Timestamp Created: {log_data[7][:16] if log_data[7] else 'Unknown'}
+Timestamp Created: {log_data.get('ots_created_at', 'Unknown')[:16] if log_data.get('ots_created_at') else 'Unknown'}
 Verification: Submitted to Bitcoin blockchain, awaiting confirmation"""
     elif blockchain_status == 'failed':
         blockchain_info = f"""
@@ -522,12 +802,12 @@ Verification: No blockchain timestamp available"""
     export_text = f"""
 COMMUNICATION LOG EXPORT
 ========================
-Method: {log_data[0]}
-Recipient: {log_data[1]}
-Date/Time: {log_data[4]}
-Description: {log_data[2]}
-Notes: {log_data[3]}
-Verification Hash: {log_data[5]}{blockchain_info}
+Method: {log_data['method']}
+Recipient: {log_data['recipient']}
+Date/Time: {log_data['timestamp']}
+Description: {log_data['description']}
+Notes: {log_data['notes'] or 'None'}
+Verification Hash: {log_data['verification_hash']}{blockchain_info}
 ========================
 Generated on: {datetime.now()}
 
@@ -543,6 +823,64 @@ Learn more: https://opentimestamps.org
         mimetype='text/plain',
         headers={'Content-Disposition': f'attachment; filename=log_{log_id}_export.txt'}
     )
+
+@app.route('/export_log/<int:log_id>/pdf')
+@login_required
+def export_log_pdf(log_id):
+    """Export log as PDF file"""
+    log_data = get_log_data_for_export(log_id, current_user.id)
+    if not log_data:
+        flash('Log not found')
+        return redirect(url_for('dashboard'))
+    
+    pdf_path = generate_pdf_export(log_data, log_id, current_user.id)
+    if not pdf_path:
+        flash('Failed to generate PDF export')
+        return redirect(url_for('view_log', log_id=log_id))
+    
+    try:
+        return send_from_directory(
+            os.path.dirname(pdf_path),
+            os.path.basename(pdf_path),
+            as_attachment=True,
+            download_name=f'log_{log_id}_report.pdf',
+            mimetype='application/pdf'
+        )
+    finally:
+        # Clean up temp file after sending
+        try:
+            os.unlink(pdf_path)
+        except:
+            pass
+
+@app.route('/export_log/<int:log_id>/zip')
+@login_required
+def export_log_zip(log_id):
+    """Export log as ZIP file with all evidence"""
+    log_data = get_log_data_for_export(log_id, current_user.id)
+    if not log_data:
+        flash('Log not found')
+        return redirect(url_for('dashboard'))
+    
+    zip_path = generate_zip_export(log_data, log_id, current_user.id)
+    if not zip_path:
+        flash('Failed to generate ZIP export')
+        return redirect(url_for('view_log', log_id=log_id))
+    
+    try:
+        return send_from_directory(
+            os.path.dirname(zip_path),
+            os.path.basename(zip_path),
+            as_attachment=True,
+            download_name=f'log_{log_id}_evidence_package.zip',
+            mimetype='application/zip'
+        )
+    finally:
+        # Clean up temp file after sending
+        try:
+            os.unlink(zip_path)
+        except:
+            pass
 
 def init_db():
     """Initialize the database with required tables"""
