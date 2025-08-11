@@ -187,7 +187,7 @@
                 <select name="user">
                     <option value="">All Users</option>
                     {% for user_id, username in users %}
-                    <option value="{{ user_id }}" {% if current_filters.user == user_id|string %}selected{% endif %}>
+                    <option value="{{ user_id }}" {% if current_filters.user == (user_id ~ '') %}selected{% endif %}>
                         {{ username }}
                     </option>
                     {% endfor %}

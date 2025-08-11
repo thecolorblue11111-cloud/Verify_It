@@ -275,7 +275,7 @@ def create_audit_log(action, resource_type, resource_id=None, details=None, user
         timestamp_str = str(timestamp)
         hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp_str}{ip_address}{previous_hash}"
         if details:
-            hash_data += json.dumps(details)
+            hash_data += json.dumps(details, sort_keys=True)
         
         audit_hash = hashlib.sha256(hash_data.encode()).hexdigest()
         
@@ -327,7 +327,9 @@ def verify_audit_chain():
             # Recalculate hash using same format as creation
             hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp}{ip_address}{previous_hash}"
             if details:
-                hash_data += details
+                # Parse and re-serialize with sort_keys=True for consistency
+                details_dict = json.loads(details)
+                hash_data += json.dumps(details_dict, sort_keys=True)
             
             calculated_hash = hashlib.sha256(hash_data.encode()).hexdigest()
             
