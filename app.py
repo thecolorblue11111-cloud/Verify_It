@@ -114,8 +114,12 @@ def check_timestamp_status(log_id, user_id, ots_file_path):
             return 'missing'
         
         # Try to upgrade the timestamp
-        result = subprocess.run(['ots', 'upgrade', full_ots_path], 
-                              capture_output=True, text=True, timeout=30)
+        upgrade_result = subprocess.run(['ots', 'upgrade', full_ots_path], 
+                                      capture_output=True, text=True, timeout=30)
+        
+        # Log upgrade issues but continue with verification
+        if upgrade_result.returncode != 0:
+            logging.warning(f"OTS upgrade failed for log {log_id}: {upgrade_result.stderr}")
         
         # Check verification status
         verify_result = subprocess.run(['ots', 'verify', full_ots_path], 
