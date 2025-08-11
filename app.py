@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import sqlite3
 import speech_recognition as sr
@@ -20,7 +20,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import qrcode
-from PIL import Image
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -137,6 +136,11 @@ def create_opentimestamp(data_hash, log_id, user_id):
 def check_timestamp_status(log_id, user_id, ots_file_path):
     """Check and update the status of an OpenTimestamp"""
     try:
+        # Security check: ensure path is relative to prevent directory traversal
+        if os.path.isabs(ots_file_path):
+            logging.error(f"Absolute path detected in ots_file_path: {ots_file_path}")
+            return 'error'
+        
         full_ots_path = os.path.join(UPLOAD_FOLDER, ots_file_path)
         if not os.path.exists(full_ots_path):
             return 'missing'
@@ -188,6 +192,11 @@ def check_timestamp_status(log_id, user_id, ots_file_path):
 def get_timestamp_info(ots_file_path):
     """Get detailed information about a timestamp"""
     try:
+        # Security check: ensure path is relative to prevent directory traversal
+        if os.path.isabs(ots_file_path):
+            logging.error(f"Absolute path detected in ots_file_path: {ots_file_path}")
+            return None
+        
         full_ots_path = os.path.join(UPLOAD_FOLDER, ots_file_path)
         if not os.path.exists(full_ots_path):
             return None
@@ -838,20 +847,20 @@ def export_log_pdf(log_id):
         flash('Failed to generate PDF export')
         return redirect(url_for('view_log', log_id=log_id))
     
-    try:
-        return send_from_directory(
-            os.path.dirname(pdf_path),
-            os.path.basename(pdf_path),
-            as_attachment=True,
-            download_name=f'log_{log_id}_report.pdf',
-            mimetype='application/pdf'
-        )
-    finally:
-        # Clean up temp file after sending
+    @after_this_request
+    def cleanup(response):
         try:
             os.unlink(pdf_path)
         except:
             pass
+        return response
+    
+    return send_file(
+        pdf_path,
+        as_attachment=True,
+        download_name=f'log_{log_id}_report.pdf',
+        mimetype='application/pdf'
+    )
 
 @app.route('/export_log/<int:log_id>/zip')
 @login_required
@@ -867,20 +876,20 @@ def export_log_zip(log_id):
         flash('Failed to generate ZIP export')
         return redirect(url_for('view_log', log_id=log_id))
     
-    try:
-        return send_from_directory(
-            os.path.dirname(zip_path),
-            os.path.basename(zip_path),
-            as_attachment=True,
-            download_name=f'log_{log_id}_evidence_package.zip',
-            mimetype='application/zip'
-        )
-    finally:
-        # Clean up temp file after sending
+    @after_this_request
+    def cleanup(response):
         try:
             os.unlink(zip_path)
         except:
             pass
+        return response
+    
+    return send_file(
+        zip_path,
+        as_attachment=True,
+        download_name=f'log_{log_id}_evidence_package.zip',
+        mimetype='application/zip'
+    )
 
 def init_db():
     """Initialize the database with required tables"""
