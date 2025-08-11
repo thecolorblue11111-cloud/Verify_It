@@ -259,38 +259,37 @@ def create_audit_log(action, resource_type, resource_id=None, details=None, user
             user_id = current_user.id
         
         # Get the previous audit log hash for chaining
-        conn = sqlite3.connect('database.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT hash FROM audit_logs ORDER BY id DESC LIMIT 1')
-        previous_hash = cursor.fetchone()
-        previous_hash = previous_hash[0] if previous_hash else '0'
-        
-        # Create audit log entry
-        timestamp = datetime.now()
-        ip_address = get_client_ip()
-        user_agent = get_user_agent()
-        
-        # Create hash for tamper detection (chain with previous hash)
-        # Use string representation to match SQLite storage format
-        timestamp_str = str(timestamp)
-        hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp_str}{ip_address}{previous_hash}"
-        if details:
-            hash_data += json.dumps(details, sort_keys=True)
-        
-        audit_hash = hashlib.sha256(hash_data.encode()).hexdigest()
-        
-        # Store audit log (use same JSON format as hash for consistency)
-        details_json = json.dumps(details, sort_keys=True) if details else None
-        cursor.execute('''
-            INSERT INTO audit_logs (user_id, action, resource_type, resource_id, 
-                                  details, ip_address, user_agent, timestamp, 
-                                  status, hash, previous_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, action, resource_type, resource_id, details_json,
-              ip_address, user_agent, timestamp, status, audit_hash, previous_hash))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect('database.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT hash FROM audit_logs ORDER BY id DESC LIMIT 1')
+            previous_hash = cursor.fetchone()
+            previous_hash = previous_hash[0] if previous_hash else '0'
+            
+            # Create audit log entry
+            timestamp = datetime.now()
+            ip_address = get_client_ip()
+            user_agent = get_user_agent()
+            
+            # Create hash for tamper detection (chain with previous hash)
+            # Use string representation to match SQLite storage format
+            timestamp_str = str(timestamp)
+            hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp_str}{ip_address}{previous_hash}"
+            if details:
+                hash_data += json.dumps(details, sort_keys=True)
+            
+            audit_hash = hashlib.sha256(hash_data.encode()).hexdigest()
+            
+            # Store audit log (use same JSON format as hash for consistency)
+            details_json = json.dumps(details, sort_keys=True) if details else None
+            cursor.execute('''
+                INSERT INTO audit_logs (user_id, action, resource_type, resource_id, 
+                                      details, ip_address, user_agent, timestamp, 
+                                      status, hash, previous_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, action, resource_type, resource_id, details_json,
+                  ip_address, user_agent, timestamp, status, audit_hash, previous_hash))
+            
+            conn.commit()
         
         logging.info(f"Audit log created: {action} on {resource_type} by user {user_id}")
         return True
