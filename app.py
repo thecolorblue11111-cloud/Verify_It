@@ -5,6 +5,11 @@ import subprocess
 import zipfile
 import tempfile
 import json
+import email
+import email.utils
+import re
+import dns.resolver
+import dns.exception
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -13,6 +18,8 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import sqlite3
 import speech_recognition as sr
+from email_validator import validate_email, EmailNotValidError
+import dkim
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
@@ -444,6 +451,516 @@ def detect_suspicious_activity():
         logging.error(f"Suspicious activity detection failed: {e}")
         return []
 
+# Email Metadata Parsing and Verification System
+def parse_email_headers(email_content):
+    """Parse email headers and extract metadata"""
+    try:
+        # Parse the email content
+        if isinstance(email_content, str):
+            msg = email.message_from_string(email_content)
+        else:
+            msg = email.message_from_bytes(email_content)
+        
+        # Extract key headers
+        headers = {}
+        
+        # Basic headers
+        headers['from'] = msg.get('From', '')
+        headers['to'] = msg.get('To', '')
+        headers['cc'] = msg.get('Cc', '')
+        headers['bcc'] = msg.get('Bcc', '')
+        headers['subject'] = msg.get('Subject', '')
+        headers['date'] = msg.get('Date', '')
+        headers['message_id'] = msg.get('Message-ID', '')
+        
+        # Authentication headers
+        headers['dkim_signature'] = msg.get('DKIM-Signature', '')
+        headers['authentication_results'] = msg.get('Authentication-Results', '')
+        headers['received_spf'] = msg.get('Received-SPF', '')
+        headers['arc_authentication_results'] = msg.get('ARC-Authentication-Results', '')
+        
+        # Routing headers
+        received_headers = msg.get_all('Received') or []
+        headers['received'] = received_headers
+        headers['return_path'] = msg.get('Return-Path', '')
+        headers['reply_to'] = msg.get('Reply-To', '')
+        
+        # Technical headers
+        headers['mime_version'] = msg.get('MIME-Version', '')
+        headers['content_type'] = msg.get('Content-Type', '')
+        headers['content_transfer_encoding'] = msg.get('Content-Transfer-Encoding', '')
+        headers['x_mailer'] = msg.get('X-Mailer', '')
+        headers['user_agent'] = msg.get('User-Agent', '')
+        
+        # Security headers
+        headers['x_spam_score'] = msg.get('X-Spam-Score', '')
+        headers['x_spam_status'] = msg.get('X-Spam-Status', '')
+        
+        # Parse date
+        parsed_date = None
+        if headers['date']:
+            try:
+                parsed_date = email.utils.parsedate_to_datetime(headers['date'])
+            except (ValueError, TypeError):
+                pass
+        
+        headers['parsed_date'] = parsed_date
+        
+        return headers
+        
+    except Exception as e:
+        logging.error(f"Email header parsing failed: {e}")
+        return {}
+
+def verify_email_authenticity(email_content, sender_domain=None):
+    """Verify email authenticity using DKIM and SPF"""
+    verification_results = {
+        'dkim_valid': False,
+        'spf_valid': False,
+        'dkim_details': '',
+        'spf_details': '',
+        'overall_status': 'failed',
+        'warnings': []
+    }
+    
+    try:
+        # Parse email headers first
+        headers = parse_email_headers(email_content)
+        
+        # Extract sender domain if not provided
+        if not sender_domain and headers.get('from'):
+            from_addr = headers['from']
+            # Extract domain from email address
+            match = re.search(r'@([a-zA-Z0-9.-]+)', from_addr)
+            if match:
+                sender_domain = match.group(1)
+        
+        # DKIM Verification
+        if headers.get('dkim_signature'):
+            try:
+                if isinstance(email_content, str):
+                    email_bytes = email_content.encode('utf-8')
+                else:
+                    email_bytes = email_content
+                
+                # Verify DKIM signature
+                dkim_result = dkim.verify(email_bytes)
+                verification_results['dkim_valid'] = dkim_result
+                verification_results['dkim_details'] = 'DKIM signature verified successfully' if dkim_result else 'DKIM signature verification failed'
+                
+            except Exception as e:
+                verification_results['dkim_details'] = f'DKIM verification error: {str(e)}'
+                verification_results['warnings'].append('DKIM verification encountered an error')
+        else:
+            verification_results['dkim_details'] = 'No DKIM signature found'
+            verification_results['warnings'].append('Email lacks DKIM signature')
+        
+        # SPF Verification
+        if sender_domain:
+            try:
+                spf_result = check_spf_record(sender_domain, headers.get('received', []))
+                verification_results['spf_valid'] = spf_result['valid']
+                verification_results['spf_details'] = spf_result['details']
+                
+                if not spf_result['valid']:
+                    verification_results['warnings'].append('SPF verification failed')
+                    
+            except Exception as e:
+                verification_results['spf_details'] = f'SPF verification error: {str(e)}'
+                verification_results['warnings'].append('SPF verification encountered an error')
+        else:
+            verification_results['spf_details'] = 'Cannot determine sender domain for SPF check'
+            verification_results['warnings'].append('Unable to extract sender domain')
+        
+        # Determine overall status
+        if verification_results['dkim_valid'] and verification_results['spf_valid']:
+            verification_results['overall_status'] = 'verified'
+        elif verification_results['dkim_valid'] or verification_results['spf_valid']:
+            verification_results['overall_status'] = 'partial'
+        else:
+            verification_results['overall_status'] = 'failed'
+        
+        return verification_results
+        
+    except Exception as e:
+        logging.error(f"Email authenticity verification failed: {e}")
+        verification_results['dkim_details'] = f'Verification error: {str(e)}'
+        verification_results['spf_details'] = f'Verification error: {str(e)}'
+        return verification_results
+
+def check_spf_record(domain, received_headers):
+    """Check SPF record for domain"""
+    try:
+        # Get SPF record from DNS
+        try:
+            answers = dns.resolver.resolve(domain, 'TXT')
+            spf_record = None
+            
+            for rdata in answers:
+                txt_string = str(rdata).strip('"')
+                if txt_string.startswith('v=spf1'):
+                    spf_record = txt_string
+                    break
+            
+            if not spf_record:
+                return {
+                    'valid': False,
+                    'details': f'No SPF record found for domain {domain}'
+                }
+            
+            # Basic SPF validation (simplified)
+            # In a production system, you'd want a full SPF parser
+            if 'include:' in spf_record or '+all' in spf_record or '~all' in spf_record or '-all' in spf_record:
+                # Extract sending IP from Received headers
+                sending_ip = extract_sending_ip(received_headers)
+                
+                if sending_ip:
+                    return {
+                        'valid': True,
+                        'details': f'SPF record found: {spf_record}. Sending IP: {sending_ip}'
+                    }
+                else:
+                    return {
+                        'valid': False,
+                        'details': f'SPF record found: {spf_record}, but could not determine sending IP'
+                    }
+            else:
+                return {
+                    'valid': False,
+                    'details': f'SPF record found but appears restrictive: {spf_record}'
+                }
+                
+        except dns.exception.DNSException as e:
+            return {
+                'valid': False,
+                'details': f'DNS lookup failed for {domain}: {str(e)}'
+            }
+            
+    except Exception as e:
+        return {
+            'valid': False,
+            'details': f'SPF check error: {str(e)}'
+        }
+
+def extract_sending_ip(received_headers):
+    """Extract the sending IP address from Received headers"""
+    try:
+        if not received_headers:
+            return None
+        
+        # Look at the first (topmost) Received header
+        first_received = received_headers[0] if isinstance(received_headers, list) else received_headers
+        
+        # Common patterns for IP addresses in Received headers
+        ip_patterns = [
+            r'\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]',  # [192.168.1.1]
+            r'from\s+\S+\s+\((\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\)',  # from host (192.168.1.1)
+            r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # bare IP
+        ]
+        
+        for pattern in ip_patterns:
+            match = re.search(pattern, first_received)
+            if match:
+                return match.group(1)
+        
+        return None
+        
+    except Exception as e:
+        logging.error(f"IP extraction failed: {e}")
+        return None
+
+def validate_email_address(email_addr):
+    """Validate email address format and domain"""
+    try:
+        # Use email-validator library for comprehensive validation
+        valid = validate_email(email_addr)
+        return {
+            'valid': True,
+            'normalized': valid.email,
+            'local': valid.local,
+            'domain': valid.domain,
+            'details': 'Email address is valid'
+        }
+    except EmailNotValidError as e:
+        return {
+            'valid': False,
+            'normalized': email_addr,
+            'local': '',
+            'domain': '',
+            'details': str(e)
+        }
+
+def analyze_email_metadata(email_content):
+    """Comprehensive email metadata analysis"""
+    try:
+        # Parse headers
+        headers = parse_email_headers(email_content)
+        
+        # Verify authenticity
+        verification = verify_email_authenticity(email_content)
+        
+        # Validate email addresses
+        from_validation = validate_email_address(headers.get('from', '')) if headers.get('from') else None
+        to_validation = validate_email_address(headers.get('to', '')) if headers.get('to') else None
+        
+        # Analyze timestamps
+        timestamp_analysis = analyze_email_timestamps(headers)
+        
+        # Security analysis
+        security_analysis = analyze_email_security(headers)
+        
+        return {
+            'headers': headers,
+            'verification': verification,
+            'from_validation': from_validation,
+            'to_validation': to_validation,
+            'timestamp_analysis': timestamp_analysis,
+            'security_analysis': security_analysis,
+            'analysis_timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logging.error(f"Email metadata analysis failed: {e}")
+        return {
+            'error': str(e),
+            'analysis_timestamp': datetime.now().isoformat()
+        }
+
+def analyze_email_timestamps(headers):
+    """Analyze email timestamps for consistency"""
+    try:
+        analysis = {
+            'date_header': headers.get('date', ''),
+            'parsed_date': headers.get('parsed_date'),
+            'received_timestamps': [],
+            'timestamp_consistency': 'unknown',
+            'warnings': []
+        }
+        
+        # Extract timestamps from Received headers
+        received_headers = headers.get('received', [])
+        if isinstance(received_headers, list):
+            for received in received_headers:
+                # Extract timestamp from Received header
+                timestamp_match = re.search(r';\s*(.+)$', received)
+                if timestamp_match:
+                    timestamp_str = timestamp_match.group(1).strip()
+                    try:
+                        parsed_timestamp = email.utils.parsedate_to_datetime(timestamp_str)
+                        analysis['received_timestamps'].append({
+                            'raw': timestamp_str,
+                            'parsed': parsed_timestamp.isoformat()
+                        })
+                    except (ValueError, TypeError):
+                        analysis['warnings'].append(f'Could not parse timestamp: {timestamp_str}')
+        
+        # Check consistency
+        if analysis['parsed_date'] and analysis['received_timestamps']:
+            # Compare Date header with first Received timestamp
+            first_received = analysis['received_timestamps'][0]['parsed'] if analysis['received_timestamps'] else None
+            if first_received:
+                date_diff = abs((analysis['parsed_date'] - email.utils.parsedate_to_datetime(first_received)).total_seconds())
+                if date_diff < 300:  # 5 minutes tolerance
+                    analysis['timestamp_consistency'] = 'consistent'
+                elif date_diff < 3600:  # 1 hour tolerance
+                    analysis['timestamp_consistency'] = 'minor_discrepancy'
+                    analysis['warnings'].append('Minor timestamp discrepancy detected')
+                else:
+                    analysis['timestamp_consistency'] = 'major_discrepancy'
+                    analysis['warnings'].append('Major timestamp discrepancy detected')
+        
+        return analysis
+        
+    except Exception as e:
+        logging.error(f"Timestamp analysis failed: {e}")
+        return {'error': str(e)}
+
+def analyze_email_security(headers):
+    """Analyze email security indicators"""
+    try:
+        analysis = {
+            'spam_indicators': [],
+            'security_headers': {},
+            'routing_analysis': {},
+            'risk_level': 'low',
+            'warnings': []
+        }
+        
+        # Check spam indicators
+        spam_score = headers.get('x_spam_score', '')
+        spam_status = headers.get('x_spam_status', '')
+        
+        if spam_score:
+            try:
+                score = float(spam_score)
+                if score > 5:
+                    analysis['spam_indicators'].append(f'High spam score: {score}')
+                    analysis['risk_level'] = 'high'
+                elif score > 2:
+                    analysis['spam_indicators'].append(f'Moderate spam score: {score}')
+                    analysis['risk_level'] = 'medium'
+            except ValueError:
+                pass
+        
+        if 'YES' in spam_status.upper():
+            analysis['spam_indicators'].append('Marked as spam by filter')
+            analysis['risk_level'] = 'high'
+        
+        # Analyze security headers
+        security_headers = ['dkim_signature', 'authentication_results', 'received_spf']
+        for header in security_headers:
+            if headers.get(header):
+                analysis['security_headers'][header] = 'present'
+            else:
+                analysis['security_headers'][header] = 'missing'
+                analysis['warnings'].append(f'Missing security header: {header}')
+        
+        # Analyze routing
+        received_count = len(headers.get('received', []))
+        analysis['routing_analysis']['hop_count'] = received_count
+        
+        if received_count > 10:
+            analysis['warnings'].append('Unusually high number of mail hops')
+            analysis['risk_level'] = 'medium'
+        elif received_count == 0:
+            analysis['warnings'].append('No Received headers found')
+            analysis['risk_level'] = 'high'
+        
+        return analysis
+        
+    except Exception as e:
+        logging.error(f"Security analysis failed: {e}")
+        return {'error': str(e)}
+
+def store_email_metadata(log_id, email_content, analysis_results):
+    """Store email metadata analysis results in database"""
+    try:
+        with sqlite3.connect('database.db') as conn:
+            cursor = conn.cursor()
+            
+            # Extract key values for quick querying
+            verification = analysis_results.get('verification', {})
+            security = analysis_results.get('security_analysis', {})
+            
+            overall_status = verification.get('overall_status', 'unknown')
+            dkim_valid = verification.get('dkim_valid', False)
+            spf_valid = verification.get('spf_valid', False)
+            risk_level = security.get('risk_level', 'unknown')
+            
+            # Store the analysis results
+            cursor.execute('''
+                INSERT INTO email_metadata (
+                    log_id, email_content, headers_json, verification_json,
+                    from_validation_json, to_validation_json, timestamp_analysis_json,
+                    security_analysis_json, overall_status, dkim_valid, spf_valid, risk_level
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                log_id,
+                email_content,
+                json.dumps(analysis_results.get('headers', {}), sort_keys=True),
+                json.dumps(verification, sort_keys=True),
+                json.dumps(analysis_results.get('from_validation', {}), sort_keys=True),
+                json.dumps(analysis_results.get('to_validation', {}), sort_keys=True),
+                json.dumps(analysis_results.get('timestamp_analysis', {}), sort_keys=True),
+                json.dumps(security, sort_keys=True),
+                overall_status,
+                dkim_valid,
+                spf_valid,
+                risk_level
+            ))
+            
+            # Update the logs table with verification status
+            email_verified = overall_status in ['verified', 'partial']
+            cursor.execute('''
+                UPDATE logs SET email_verified = ?, email_verification_status = ?
+                WHERE id = ?
+            ''', (email_verified, overall_status, log_id))
+            
+            conn.commit()
+            
+            logging.info(f"Email metadata stored for log {log_id} with status {overall_status}")
+            return True
+            
+    except Exception as e:
+        logging.error(f"Failed to store email metadata for log {log_id}: {e}")
+        return False
+
+def get_email_metadata(log_id):
+    """Retrieve email metadata analysis results from database"""
+    try:
+        with sqlite3.connect('database.db') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, email_content, headers_json, verification_json,
+                       from_validation_json, to_validation_json, timestamp_analysis_json,
+                       security_analysis_json, overall_status, dkim_valid, spf_valid,
+                       risk_level, created_at
+                FROM email_metadata WHERE log_id = ?
+                ORDER BY created_at DESC LIMIT 1
+            ''', (log_id,))
+            
+            result = cursor.fetchone()
+            
+            if not result:
+                return None
+            
+            # Parse JSON fields
+            metadata = {
+                'id': result[0],
+                'email_content': result[1],
+                'headers': json.loads(result[2]) if result[2] else {},
+                'verification': json.loads(result[3]) if result[3] else {},
+                'from_validation': json.loads(result[4]) if result[4] else {},
+                'to_validation': json.loads(result[5]) if result[5] else {},
+                'timestamp_analysis': json.loads(result[6]) if result[6] else {},
+                'security_analysis': json.loads(result[7]) if result[7] else {},
+                'overall_status': result[8],
+                'dkim_valid': bool(result[9]),
+                'spf_valid': bool(result[10]),
+                'risk_level': result[11],
+                'created_at': result[12]
+            }
+            
+            return metadata
+            
+    except Exception as e:
+        logging.error(f"Failed to retrieve email metadata for log {log_id}: {e}")
+        return None
+
+def process_email_for_log(log_id, email_content):
+    """Process email content and store metadata for a log entry"""
+    try:
+        # Analyze the email
+        analysis_results = analyze_email_metadata(email_content)
+        
+        if 'error' in analysis_results:
+            logging.error(f"Email analysis failed for log {log_id}: {analysis_results['error']}")
+            return False
+        
+        # Store the results
+        success = store_email_metadata(log_id, email_content, analysis_results)
+        
+        if success:
+            # Create audit log for email verification
+            create_audit_log(
+                action='email_verification',
+                resource_type='log',
+                resource_id=log_id,
+                details={
+                    'overall_status': analysis_results.get('verification', {}).get('overall_status', 'unknown'),
+                    'dkim_valid': analysis_results.get('verification', {}).get('dkim_valid', False),
+                    'spf_valid': analysis_results.get('verification', {}).get('spf_valid', False),
+                    'risk_level': analysis_results.get('security_analysis', {}).get('risk_level', 'unknown')
+                },
+                status='success'
+            )
+        
+        return success
+        
+    except Exception as e:
+        logging.error(f"Email processing failed for log {log_id}: {e}")
+        return False
+
 def generate_pdf_export(log_data, log_id, user_id):
     """Generate a comprehensive PDF export for a log"""
     try:
@@ -807,7 +1324,8 @@ def dashboard():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT id, method, recipient, description, timestamp, ots_status
+        SELECT id, method, recipient, description, timestamp, ots_status,
+               email_verified, email_verification_status
         FROM logs WHERE user_id = ?
         ORDER BY timestamp DESC
     ''', (current_user.id,))
@@ -823,7 +1341,9 @@ def dashboard():
             'recipient': log[2],
             'description': log[3],
             'timestamp': log[4],
-            'ots_status': log[5] or 'none'
+            'ots_status': log[5] or 'none',
+            'email_verified': bool(log[6]) if len(log) > 6 else False,
+            'email_verification_status': log[7] if len(log) > 7 else 'none'
         })
     
     return render_template('dashboard.html', logs=log_list)
@@ -911,16 +1431,48 @@ def create_log():
     log_id = cursor.lastrowid
     conn.close()
     
+    # Process email metadata if the uploaded file is an email
+    email_processed = False
+    if file_path and method.lower() == 'email':
+        try:
+            full_file_path = os.path.join(UPLOAD_FOLDER, file_path)
+            if os.path.exists(full_file_path):
+                # Check if file is an email format
+                filename_lower = file_path.lower()
+                if filename_lower.endswith(('.eml', '.msg', '.txt')):
+                    # Read email content
+                    with open(full_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        email_content = f.read()
+                    
+                    # Process email metadata
+                    if email_content.strip():
+                        email_processed = process_email_for_log(log_id, email_content)
+                        if email_processed:
+                            logging.info(f"Email metadata processed for log {log_id}")
+                        else:
+                            logging.warning(f"Email metadata processing failed for log {log_id}")
+        except Exception as e:
+            logging.error(f"Email processing error for log {log_id}: {e}")
+    
     # Create OpenTimestamp for the log
     try:
         success = create_opentimestamp(verification_hash, log_id, current_user.id)
         if success:
-            flash('Log created successfully with blockchain timestamp!')
+            if email_processed:
+                flash('Log created successfully with blockchain timestamp and email verification!')
+            else:
+                flash('Log created successfully with blockchain timestamp!')
         else:
-            flash('Log created successfully, but blockchain timestamping failed.')
+            if email_processed:
+                flash('Log created successfully with email verification, but blockchain timestamping failed.')
+            else:
+                flash('Log created successfully, but blockchain timestamping failed.')
     except Exception as e:
         logging.error(f"Failed to create timestamp for log {log_id}: {e}")
-        flash('Log created successfully, but blockchain timestamping failed.')
+        if email_processed:
+            flash('Log created successfully with email verification, but blockchain timestamping failed.')
+        else:
+            flash('Log created successfully, but blockchain timestamping failed.')
     
     return redirect(url_for('dashboard'))
 
@@ -933,7 +1485,8 @@ def view_log(log_id):
     cursor.execute('''
         SELECT id, method, recipient, description, notes, timestamp,
                file_path, audio_path, transcript, verification_hash,
-               ots_file_path, ots_status, ots_created_at, ots_confirmed_at
+               ots_file_path, ots_status, ots_created_at, ots_confirmed_at,
+               email_verified, email_verification_status
         FROM logs WHERE id = ? AND user_id = ?
     ''', (log_id, current_user.id))
     
@@ -958,8 +1511,17 @@ def view_log(log_id):
         'ots_file_path': log_data[10],
         'ots_status': log_data[11],
         'ots_created_at': log_data[12],
-        'ots_confirmed_at': log_data[13]
+        'ots_confirmed_at': log_data[13],
+        'email_verified': bool(log_data[14]) if len(log_data) > 14 else False,
+        'email_verification_status': log_data[15] if len(log_data) > 15 else 'none'
     }
+    
+    # Get email metadata if available
+    email_metadata = None
+    if log['method'].lower() == 'email' and log['email_verification_status'] != 'none':
+        email_metadata = get_email_metadata(log_id)
+    
+    log['email_metadata'] = email_metadata
     
     # Get timestamp info if available
     if log['ots_file_path']:
@@ -968,6 +1530,63 @@ def view_log(log_id):
         log['ots_info'] = None
     
     return render_template('log_details.html', log=log)
+
+@app.route('/verify_email/<int:log_id>', methods=['POST'])
+@login_required
+def verify_email_metadata(log_id):
+    """Manually trigger email verification for a log"""
+    # Check if log belongs to current user
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, method, file_path FROM logs 
+        WHERE id = ? AND user_id = ?
+    ''', (log_id, current_user.id))
+    
+    log_data = cursor.fetchone()
+    conn.close()
+    
+    if not log_data:
+        flash('Log not found')
+        return redirect(url_for('dashboard'))
+    
+    log_id_db, method, file_path = log_data
+    
+    if method.lower() != 'email':
+        flash('Email verification is only available for email logs')
+        return redirect(url_for('view_log', log_id=log_id))
+    
+    if not file_path:
+        flash('No email file found for verification')
+        return redirect(url_for('view_log', log_id=log_id))
+    
+    try:
+        # Read email content from file
+        full_file_path = os.path.join(UPLOAD_FOLDER, file_path)
+        if not os.path.exists(full_file_path):
+            flash('Email file not found on disk')
+            return redirect(url_for('view_log', log_id=log_id))
+        
+        with open(full_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            email_content = f.read()
+        
+        if not email_content.strip():
+            flash('Email file is empty')
+            return redirect(url_for('view_log', log_id=log_id))
+        
+        # Process email metadata
+        success = process_email_for_log(log_id, email_content)
+        
+        if success:
+            flash('Email verification completed successfully!')
+        else:
+            flash('Email verification failed. Please check the email format.')
+            
+    except Exception as e:
+        logging.error(f"Manual email verification failed for log {log_id}: {e}")
+        flash('Email verification failed due to an error.')
+    
+    return redirect(url_for('view_log', log_id=log_id))
 
 @app.route('/check_timestamp/<int:log_id>')
 @login_required
@@ -1454,6 +2073,47 @@ def init_db():
     cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)
     ''')
+    
+    # Create email_metadata table for email verification results
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS email_metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            log_id INTEGER NOT NULL,
+            email_content TEXT,
+            headers_json TEXT,
+            verification_json TEXT,
+            from_validation_json TEXT,
+            to_validation_json TEXT,
+            timestamp_analysis_json TEXT,
+            security_analysis_json TEXT,
+            overall_status TEXT DEFAULT 'unknown',
+            dkim_valid BOOLEAN DEFAULT 0,
+            spf_valid BOOLEAN DEFAULT 0,
+            risk_level TEXT DEFAULT 'unknown',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (log_id) REFERENCES logs (id)
+        )
+    ''')
+    
+    # Create index for efficient email metadata queries
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_email_metadata_log_id ON email_metadata(log_id)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_email_metadata_status ON email_metadata(overall_status)
+    ''')
+    
+    # Add email metadata columns to logs table if they don't exist
+    try:
+        cursor.execute('ALTER TABLE logs ADD COLUMN email_verified BOOLEAN DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute('ALTER TABLE logs ADD COLUMN email_verification_status TEXT DEFAULT \'none\'')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()

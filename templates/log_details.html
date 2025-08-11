@@ -131,5 +131,106 @@
             </p>
         </div>
     </div>
+    
+    {% if log.method.lower() == 'email' %}
+    <div class="form-row">
+        <div class="field">
+            <label>Email Verification:</label>
+            <div class="card" style="background: rgba(255,255,255,0.02); padding: 12px;">
+                {% if log.email_verification_status == 'verified' %}
+                    <p style="color: var(--accent); margin-bottom: 8px;">✓ <strong>Email Fully Verified</strong></p>
+                    <p class="meta">DKIM signature and SPF record verified successfully</p>
+                {% elif log.email_verification_status == 'partial' %}
+                    <p style="color: #fbbf24; margin-bottom: 8px;">⚠ <strong>Email Partially Verified</strong></p>
+                    <p class="meta">Some verification checks passed, but not all</p>
+                {% elif log.email_verification_status == 'failed' %}
+                    <p style="color: #ef4444; margin-bottom: 8px;">✗ <strong>Email Verification Failed</strong></p>
+                    <p class="meta">Email authenticity could not be verified</p>
+                {% else %}
+                    <p style="color: var(--muted); margin-bottom: 8px;">- <strong>Email Not Verified</strong></p>
+                    <p class="meta">Email verification has not been performed</p>
+                    {% if log.file_path %}
+                    <form method="POST" action="{{ url_for('verify_email_metadata', log_id=log.id) }}" style="margin-top: 8px;">
+                        <button type="submit" class="button secondary">🔍 Verify Email Now</button>
+                    </form>
+                    {% endif %}
+                {% endif %}
+                
+                {% if log.email_metadata %}
+                <details style="margin-top: 12px;">
+                    <summary style="cursor: pointer; color: var(--accent);">View Email Verification Details</summary>
+                    <div style="margin-top: 12px;">
+                        
+                        <!-- Verification Summary -->
+                        <div style="margin-bottom: 16px;">
+                            <h4 style="margin-bottom: 8px; color: var(--accent);">Verification Summary</h4>
+                            <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 4px;">
+                                <p><strong>DKIM Signature:</strong> 
+                                    {% if log.email_metadata.dkim_valid %}
+                                        <span style="color: var(--accent);">✓ Valid</span>
+                                    {% else %}
+                                        <span style="color: #ef4444;">✗ Invalid/Missing</span>
+                                    {% endif %}
+                                </p>
+                                <p><strong>SPF Record:</strong> 
+                                    {% if log.email_metadata.spf_valid %}
+                                        <span style="color: var(--accent);">✓ Valid</span>
+                                    {% else %}
+                                        <span style="color: #ef4444;">✗ Invalid/Missing</span>
+                                    {% endif %}
+                                </p>
+                                <p><strong>Risk Level:</strong> 
+                                    {% if log.email_metadata.risk_level == 'low' %}
+                                        <span style="color: var(--accent);">Low</span>
+                                    {% elif log.email_metadata.risk_level == 'medium' %}
+                                        <span style="color: #fbbf24;">Medium</span>
+                                    {% elif log.email_metadata.risk_level == 'high' %}
+                                        <span style="color: #ef4444;">High</span>
+                                    {% else %}
+                                        <span style="color: var(--muted);">Unknown</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Email Headers -->
+                        {% if log.email_metadata.headers %}
+                        <div style="margin-bottom: 16px;">
+                            <h4 style="margin-bottom: 8px; color: var(--accent);">Key Email Headers</h4>
+                            <div style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 4px; font-family: monospace; font-size: 0.85rem;">
+                                {% if log.email_metadata.headers.from %}<p><strong>From:</strong> {{ log.email_metadata.headers.from }}</p>{% endif %}
+                                {% if log.email_metadata.headers.to %}<p><strong>To:</strong> {{ log.email_metadata.headers.to }}</p>{% endif %}
+                                {% if log.email_metadata.headers.subject %}<p><strong>Subject:</strong> {{ log.email_metadata.headers.subject }}</p>{% endif %}
+                                {% if log.email_metadata.headers.date %}<p><strong>Date:</strong> {{ log.email_metadata.headers.date }}</p>{% endif %}
+                                {% if log.email_metadata.headers.message_id %}<p><strong>Message-ID:</strong> {{ log.email_metadata.headers.message_id }}</p>{% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Security Analysis -->
+                        {% if log.email_metadata.security_analysis and log.email_metadata.security_analysis.warnings %}
+                        <div style="margin-bottom: 16px;">
+                            <h4 style="margin-bottom: 8px; color: #fbbf24;">Security Warnings</h4>
+                            <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid #fbbf24; padding: 12px;">
+                                {% for warning in log.email_metadata.security_analysis.warnings %}
+                                <p style="margin-bottom: 4px;">⚠ {{ warning }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <p class="meta" style="margin-top: 12px;">
+                            Email verification performed on: {{ log.email_metadata.created_at[:16] if log.email_metadata.created_at else 'Unknown' }}
+                        </p>
+                    </div>
+                </details>
+                {% endif %}
+            </div>
+            <p class="meta" style="margin-top: 4px;">
+                Email verification checks DKIM signatures, SPF records, and other security indicators to validate email authenticity and detect potential spoofing or tampering.
+            </p>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
