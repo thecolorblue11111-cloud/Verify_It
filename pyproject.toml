@@ -14,4 +14,5 @@ dependencies = [
     "speechrecognition>=3.14.3",
     "pyaudio>=0.2.14",
     "pydub>=0.25.1",
+    "opentimestamps-client>=0.7.0",
 ]

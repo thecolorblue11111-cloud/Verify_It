@@ -129,8 +129,8 @@ def check_timestamp_status(log_id, user_id, ots_file_path):
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE logs SET ots_status = ?, ots_confirmed_at = ?
-                WHERE id = ?
-            ''', (status, datetime.now(), log_id))
+                WHERE id = ? AND user_id = ?
+            ''', (status, datetime.now(), log_id, user_id))
             conn.commit()
             conn.close()
         elif 'Pending' in verify_result.stdout:
@@ -448,7 +448,8 @@ def export_log(log_id):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT method, recipient, description, notes, timestamp, verification_hash
+        SELECT method, recipient, description, notes, timestamp, verification_hash,
+               ots_status, ots_created_at, ots_confirmed_at
         FROM logs WHERE id = ? AND user_id = ?
     ''', (log_id, current_user.id))
     
@@ -459,7 +460,30 @@ def export_log(log_id):
         flash('Log not found')
         return redirect(url_for('dashboard'))
     
-    # For now, return a simple text export
+    # Create comprehensive export with blockchain timestamp info
+    blockchain_status = log_data[6] or 'none'
+    blockchain_info = ""
+    
+    if blockchain_status == 'confirmed':
+        blockchain_info = f"""
+Blockchain Status: ✓ CONFIRMED on Bitcoin blockchain
+Timestamp Created: {log_data[7][:16] if log_data[7] else 'Unknown'}
+Blockchain Confirmed: {log_data[8][:16] if log_data[8] else 'Unknown'}
+Verification: Cryptographically proven via OpenTimestamps"""
+    elif blockchain_status == 'pending':
+        blockchain_info = f"""
+Blockchain Status: ⏳ PENDING blockchain confirmation
+Timestamp Created: {log_data[7][:16] if log_data[7] else 'Unknown'}
+Verification: Submitted to Bitcoin blockchain, awaiting confirmation"""
+    elif blockchain_status == 'failed':
+        blockchain_info = f"""
+Blockchain Status: ✗ FAILED
+Verification: Blockchain timestamping encountered an error"""
+    else:
+        blockchain_info = f"""
+Blockchain Status: - NONE
+Verification: No blockchain timestamp available"""
+
     export_text = f"""
 COMMUNICATION LOG EXPORT
 ========================
@@ -468,9 +492,14 @@ Recipient: {log_data[1]}
 Date/Time: {log_data[4]}
 Description: {log_data[2]}
 Notes: {log_data[3]}
-Verification Hash: {log_data[5]}
+Verification Hash: {log_data[5]}{blockchain_info}
 ========================
 Generated on: {datetime.now()}
+
+This export contains cryptographic proof of data integrity.
+The verification hash can be independently verified.
+Blockchain timestamps provide tamper-proof evidence of existence.
+Learn more: https://opentimestamps.org
     """
     
     from flask import Response
@@ -519,6 +548,7 @@ def init_db():
     ''')
     
     # Add OpenTimestamps columns to existing logs table if they don't exist
+    # (Only needed for existing databases that don't have these columns)
     try:
         cursor.execute('ALTER TABLE logs ADD COLUMN ots_file_path TEXT')
     except sqlite3.OperationalError:
