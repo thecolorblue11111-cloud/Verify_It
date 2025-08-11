@@ -5,7 +5,6 @@ import subprocess
 import zipfile
 import tempfile
 import json
-import ipaddress
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -272,9 +271,11 @@ def create_audit_log(action, resource_type, resource_id=None, details=None, user
         user_agent = get_user_agent()
         
         # Create hash for tamper detection (chain with previous hash)
-        hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp.isoformat()}{ip_address}{previous_hash}"
+        # Use string representation to match SQLite storage format
+        timestamp_str = str(timestamp)
+        hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp_str}{ip_address}{previous_hash}"
         if details:
-            hash_data += json.dumps(details, sort_keys=True)
+            hash_data += json.dumps(details)
         
         audit_hash = hashlib.sha256(hash_data.encode()).hexdigest()
         
@@ -323,7 +324,7 @@ def verify_audit_chain():
             if previous_hash != expected_previous:
                 return False, f"Hash chain broken at log ID {log_id}"
             
-            # Recalculate hash
+            # Recalculate hash using same format as creation
             hash_data = f"{action}{resource_type}{resource_id}{user_id}{timestamp}{ip_address}{previous_hash}"
             if details:
                 hash_data += details
