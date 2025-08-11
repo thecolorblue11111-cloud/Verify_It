@@ -252,21 +252,21 @@
         {% if total_pages > 1 %}
         <div class="pagination">
             {% if has_prev %}
-            <a href="{{ url_for('admin_audit_logs', page=page-1, **current_filters) }}">← Previous</a>
+            <a href="{{ url_for('admin_audit_logs', page=page-1, action=current_filters.action, user=current_filters.user, status=current_filters.status) }}">← Previous</a>
             {% endif %}
             
             {% for p in range(1, total_pages + 1) %}
                 {% if p == page %}
                 <span class="current">{{ p }}</span>
                 {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
-                <a href="{{ url_for('admin_audit_logs', page=p, **current_filters) }}">{{ p }}</a>
+                <a href="{{ url_for('admin_audit_logs', page=p, action=current_filters.action, user=current_filters.user, status=current_filters.status) }}">{{ p }}</a>
                 {% elif p == 4 or p == total_pages - 3 %}
                 <span>...</span>
                 {% endif %}
             {% endfor %}
             
             {% if has_next %}
-            <a href="{{ url_for('admin_audit_logs', page=page+1, **current_filters) }}">Next →</a>
+            <a href="{{ url_for('admin_audit_logs', page=page+1, action=current_filters.action, user=current_filters.user, status=current_filters.status) }}">Next →</a>
             {% endif %}
         </div>
         {% endif %}

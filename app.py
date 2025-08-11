@@ -1271,6 +1271,16 @@ def admin_audit_logs():
     has_prev = page > 1
     has_next = page < total_pages
     
+    # Build pagination parameters for template
+    current_filters = {
+        'action': action_filter,
+        'user': user_filter,
+        'status': status_filter
+    }
+    
+    # Remove empty filters for cleaner URLs
+    pagination_filters = {k: v for k, v in current_filters.items() if v}
+    
     return render_template('admin/audit_logs.html', 
                          audit_logs=log_list,
                          page=page,
@@ -1279,11 +1289,8 @@ def admin_audit_logs():
                          has_next=has_next,
                          actions=actions,
                          users=users,
-                         current_filters={
-                             'action': action_filter,
-                             'user': user_filter,
-                             'status': status_filter
-                         })
+                         current_filters=current_filters,
+                         pagination_filters=pagination_filters)
 
 @app.route('/admin/audit_verify')
 @login_required
