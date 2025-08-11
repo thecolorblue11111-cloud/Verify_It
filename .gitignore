@@ -47,7 +47,9 @@ ehthumbs.db
 Thumbs.db
 
 # Database
+*.db
 *.db-journal
+database.db
 
 # Logs
 *.log

@@ -88,8 +88,8 @@ def create_opentimestamp(data_hash, log_id, user_id):
                 cursor = conn.cursor()
                 cursor.execute('''
                     UPDATE logs SET ots_file_path = ?, ots_status = ?, ots_created_at = ?
-                    WHERE id = ?
-                ''', (relative_ots_path, 'pending', datetime.now(), log_id))
+                    WHERE id = ? AND user_id = ?
+                ''', (relative_ots_path, 'pending', datetime.now(), log_id, user_id))
                 conn.commit()
                 conn.close()
                 
@@ -555,7 +555,7 @@ def init_db():
         pass  # Column already exists
     
     try:
-        cursor.execute('ALTER TABLE logs ADD COLUMN ots_status TEXT DEFAULT "pending"')
+        cursor.execute('ALTER TABLE logs ADD COLUMN ots_status TEXT DEFAULT \'pending\'')
     except sqlite3.OperationalError:
         pass  # Column already exists
     
