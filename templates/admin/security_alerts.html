@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Alerts - Verify_It Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .admin-header {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            color: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .alert-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .alert-high {
+            border-left-color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+        
+        .alert-medium {
+            border-left-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+        }
+        
+        .alert-low {
+            border-left-color: #10b981;
+            background: rgba(16, 185, 129, 0.1);
+        }
+        
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .alert-title {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .severity-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .severity-high {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .severity-medium {
+            background: #f59e0b;
+            color: white;
+        }
+        
+        .severity-low {
+            background: #10b981;
+            color: white;
+        }
+        
+        .alert-details {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.5;
+        }
+        
+        .no-alerts {
+            text-align: center;
+            padding: 40px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .no-alerts .icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+        
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9em;
+        }
+        
+        .refresh-btn {
+            background: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .refresh-btn:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="admin-header">
+            <h1>⚠️ Security Alerts & Monitoring</h1>
+            <p>Real-time detection of suspicious activities and security threats</p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <a href="{{ url_for('admin_security_alerts') }}" class="refresh-btn">🔄 Refresh Alerts</a>
+            <a href="{{ url_for('admin_audit_logs') }}" class="button secondary">← Back to Audit Logs</a>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">{{ alerts|length }}</div>
+                <div class="stat-label">Active Alerts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ alerts|selectattr('severity', 'equalto', 'high')|list|length }}</div>
+                <div class="stat-label">High Severity</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ alerts|selectattr('severity', 'equalto', 'medium')|list|length }}</div>
+                <div class="stat-label">Medium Severity</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ alerts|selectattr('type', 'equalto', 'multiple_failed_logins')|list|length }}</div>
+                <div class="stat-label">Failed Login Attempts</div>
+            </div>
+        </div>
+        
+        <!-- Alerts -->
+        {% if alerts %}
+            {% for alert in alerts %}
+            <div class="alert-card alert-{{ alert.severity }}">
+                <div class="alert-header">
+                    <div class="alert-title">
+                        {% if alert.type == 'multiple_failed_logins' %}
+                            🚨 Multiple Failed Login Attempts
+                        {% elif alert.type == 'multiple_ip_access' %}
+                            🌐 Multiple IP Address Access
+                        {% else %}
+                            ⚠️ Security Alert
+                        {% endif %}
+                    </div>
+                    <span class="severity-badge severity-{{ alert.severity }}">{{ alert.severity }}</span>
+                </div>
+                
+                <div class="alert-details">
+                    {% if alert.type == 'multiple_failed_logins' %}
+                        <p><strong>IP Address:</strong> {{ alert.ip_address }}</p>
+                        <p><strong>Failed Attempts:</strong> {{ alert.attempts }} attempts in the last hour</p>
+                        <p><strong>Risk:</strong> Potential brute force attack or credential stuffing attempt</p>
+                        <p><strong>Recommendation:</strong> Consider blocking this IP address or implementing rate limiting</p>
+                    {% elif alert.type == 'multiple_ip_access' %}
+                        <p><strong>User ID:</strong> {{ alert.user_id }}</p>
+                        <p><strong>IP Addresses:</strong> {{ alert.ip_count }} different IPs in the last hour</p>
+                        <p><strong>Risk:</strong> Possible account compromise or shared credentials</p>
+                        <p><strong>Recommendation:</strong> Verify user identity and consider requiring password reset</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-alerts">
+                <div class="icon">✅</div>
+                <h3>No Security Alerts</h3>
+                <p>All systems are operating normally. No suspicious activity detected in the last hour.</p>
+            </div>
+        {% endif %}
+        
+        <!-- Security Recommendations -->
+        <div style="margin-top: 30px; padding: 20px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 4px solid #3b82f6;">
+            <h3>🛡️ Security Recommendations</h3>
+            <ul style="color: rgba(255, 255, 255, 0.8); line-height: 1.6;">
+                <li><strong>Regular Monitoring:</strong> Check security alerts daily for early threat detection</li>
+                <li><strong>IP Whitelisting:</strong> Consider implementing IP restrictions for admin accounts</li>
+                <li><strong>Rate Limiting:</strong> Implement login attempt limits to prevent brute force attacks</li>
+                <li><strong>Multi-Factor Authentication:</strong> Enable 2FA for all user accounts (Feature #3 coming soon)</li>
+                <li><strong>Audit Chain Verification:</strong> Regularly verify audit log integrity to detect tampering</li>
+                <li><strong>Backup Strategy:</strong> Maintain secure backups of audit logs and user data</li>
+            </ul>
+        </div>
+        
+        <!-- Alert History -->
+        <div style="margin-top: 20px; padding: 15px; background: rgba(255, 255, 255, 0.05); border-radius: 8px;">
+            <h4>📊 Alert Detection Criteria</h4>
+            <div style="color: rgba(255, 255, 255, 0.7); font-size: 0.9em;">
+                <p><strong>Failed Login Alerts:</strong> 5+ failed attempts from same IP in 1 hour</p>
+                <p><strong>Multiple IP Alerts:</strong> 3+ different IPs for same user in 1 hour</p>
+                <p><strong>Detection Window:</strong> Rolling 1-hour window for all alerts</p>
+                <p><strong>Update Frequency:</strong> Real-time detection on each page load</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -6,7 +6,10 @@
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2>Welcome, {{ current_user.username }}</h2>
-        <a href="{{ url_for('new_log') }}" class="button">+ New Log</a>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('admin_audit_logs') }}" class="button secondary">🔒 Admin</a>
+            <a href="{{ url_for('new_log') }}" class="button">+ New Log</a>
+        </div>
     </div>
     
     {% if logs %}
