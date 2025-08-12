@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MFA Verification</title>
+</head>
+<body>
+    <h2>Verify MFA Token</h2>
+    {% if error %}
+        <p style="color:red;">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/mfa/verify">
+        <label>Enter the 6-digit code from your authenticator app:</label>
+        <input type="text" name="token" maxlength="6" required/>
+        <button type="submit">Verify</button>
+    </form>
+</body>
+</html>
