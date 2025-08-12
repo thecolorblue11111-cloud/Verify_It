@@ -1,17 +1,12 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>MFA Setup</title>
-</head>
-<body>
-    <h2>Set up Two-Factor Authentication (TOTP)</h2>
-    <p>Scan this QR code with your authenticator app:</p>
-    <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR Code" />
-    <p>If you can’t scan, use this secret: <strong>{{ secret }}</strong></p>
-    <form method="post" action="/mfa/verify">
-        <label>Enter the 6-digit code from your authenticator app:</label>
-        <input type="text" name="token" maxlength="6" required/>
-        <button type="submit">Verify</button>
-    </form>
-</body>
-</html>
+{% extends "base.html" %}
+{% block content %}
+<h2>Set up MFA</h2>
+<p>Scan the QR code with your authenticator app and enter the generated code:</p>
+<img src="{{ qr_code }}" alt="MFA QR Code">
+<form method="post">
+    <input type="hidden" name="secret" value="{{ secret }}">
+    <label>Authenticator Code:</label>
+    <input type="text" name="token" required>
+    <button type="submit">Enable MFA</button>
+</form>
+{% endblock %}
