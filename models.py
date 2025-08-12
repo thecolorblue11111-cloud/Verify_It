@@ -1,13 +1,40 @@
-from sqlalchemy import Column, Integer, String, Boolean
-from sqlalchemy.ext.declarative import declarative_base
+import sqlite3
 
-Base = declarative_base()
+class User:
+    def __init__(self, id, username, password_hash, mfa_enabled=0, mfa_secret=None):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
+        self.mfa_enabled = mfa_enabled
+        self.mfa_secret = mfa_secret
 
-class User(Base):
-    __tablename__ = "users"
+    @staticmethod
+    def get_by_username(username):
+        conn = sqlite3.connect('your_database.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password_hash, mfa_enabled, mfa_secret FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return User(*row)
+        return None
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    mfa_enabled = Column(Boolean, default=False)
-    mfa_secret = Column(String, nullable=True)
+    @staticmethod
+    def get_by_id(user_id):
+        conn = sqlite3.connect('your_database.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password_hash, mfa_enabled, mfa_secret FROM users WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return User(*row)
+        return None
+
+    def set_mfa(self, enabled, secret=None):
+        conn = sqlite3.connect('your_database.db')
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET mfa_enabled = ?, mfa_secret = ? WHERE id = ?", (enabled, secret, self.id))
+        conn.commit()
+        conn.close()
+        self.mfa_enabled = enabled
+        self.mfa_secret = secret
