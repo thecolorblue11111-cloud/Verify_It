@@ -1,72 +1,65 @@
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
-from starlette.status import HTTP_303_SEE_OTHER
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash
+from models import User
+import mfa_utils
 
-from .models import User
-from .mfa_utils import generate_totp_secret, get_totp_uri, verify_totp, generate_qr_code_base64
+auth = Blueprint('auth', __name__)
 
-router = APIRouter()
-
-def get_db():
-    # Placeholder: yield your database session here
-    pass
-
-def get_current_user():
-    # Placeholder: get the current user (from session/cookie/JWT)
-    pass
-
-@router.get("/mfa/setup", response_class=HTMLResponse)
-async def mfa_setup(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@auth.route('/mfa/setup', methods=['GET', 'POST'])
+def mfa_setup():
+    user = User.get_by_id(session['user_id'])
     if user.mfa_enabled:
-        return RedirectResponse("/profile", status_code=HTTP_303_SEE_OTHER)
-    secret = generate_totp_secret()
-    uri = get_totp_uri(user.username, secret)
-    qr_base64 = generate_qr_code_base64(uri)
-    # Store secret temporarily in session or pass as hidden field (not secure, but demo)
-    request.session["pending_mfa_secret"] = secret
-    return templates.TemplateResponse("mfa_setup.html", {"request": request, "qr_base64": qr_base64, "secret": secret})
+        flash("MFA is already enabled.", "info")
+        return redirect(url_for('profile'))
 
-@router.post("/mfa/verify", response_class=HTMLResponse)
-async def mfa_verify(request: Request, token: str = Form(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    secret = request.session.get("pending_mfa_secret")
-    if not secret:
-        raise HTTPException(status_code=400, detail="No MFA setup in progress.")
-    if verify_totp(token, secret):
-        user.mfa_enabled = True
-        user.mfa_secret = secret
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        del request.session["pending_mfa_secret"]
-        return RedirectResponse("/profile", status_code=HTTP_303_SEE_OTHER)
-    else:
-        return templates.TemplateResponse("mfa_verify.html", {"request": request, "error": "Invalid token"})
+    if request.method == 'POST':
+        secret = request.form['secret']
+        token = request.form['token']
+        if mfa_utils.verify_totp(token, secret):
+            user.set_mfa(1, secret)
+            flash("MFA enabled successfully.", "success")
+            return redirect(url_for('profile'))
+        else:
+            flash("Invalid token. Please try again.", "danger")
 
-@router.post("/mfa/disable", response_class=HTMLResponse)
-async def mfa_disable(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    user.mfa_enabled = False
-    user.mfa_secret = None
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return RedirectResponse("/profile", status_code=HTTP_303_SEE_OTHER)
+    secret = mfa_utils.generate_totp_secret()
+    uri = mfa_utils.get_totp_uri(user.username, secret)
+    qr_code = mfa_utils.generate_qr_code_base64(uri)
+    return render_template('mfa_setup.html', secret=secret, qr_code=qr_code)
 
-# Example login route with MFA challenge
-@router.post("/login", response_class=HTMLResponse)
-async def login(request: Request, username: str = Form(...), password: str = Form(...), token: str = Form(None), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"})
-    if user.mfa_enabled:
-        if not token:
-            return templates.TemplateResponse("mfa_verify.html", {"request": request, "error": None, "mfa_required": True})
-        if not verify_totp(token, user.mfa_secret):
-            return templates.TemplateResponse("mfa_verify.html", {"request": request, "error": "Invalid MFA token", "mfa_required": True})
-    # Set login/session logic here
-    response = RedirectResponse("/dashboard", status_code=HTTP_303_SEE_OTHER)
-    return response
+@auth.route('/mfa/verify', methods=['GET', 'POST'])
+def mfa_verify():
+    if request.method == 'POST':
+        token = request.form['token']
+        user = User.get_by_id(session['pending_mfa_user'])
+        if user and mfa_utils.verify_totp(token, user.mfa_secret):
+            session['user_id'] = user.id
+            session.pop('pending_mfa_user', None)
+            flash("Logged in successfully.", "success")
+            return redirect(url_for('profile'))
+        else:
+            flash("Invalid MFA token.", "danger")
+    return render_template('mfa_verify.html')
 
-def verify_password(plain: str, hashed: str):
-    # Implement your password hashing check here
-    pass
+@auth.route('/mfa/disable', methods=['POST'])
+def mfa_disable():
+    user = User.get_by_id(session['user_id'])
+    user.set_mfa(0, None)
+    flash("MFA disabled.", "info")
+    return redirect(url_for('profile'))
+
+@auth.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.get_by_username(username)
+        if user and check_password(user.password_hash, password):
+            if user.mfa_enabled:
+                session['pending_mfa_user'] = user.id
+                return redirect(url_for('auth.mfa_verify'))
+            session['user_id'] = user.id
+            flash("Logged in successfully.", "success")
+            return redirect(url_for('profile'))
+        else:
+            flash("Invalid credentials.", "danger")
+    return render_template('login.html')
