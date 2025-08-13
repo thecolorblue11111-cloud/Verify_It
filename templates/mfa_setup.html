@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Set up MFA</h2>
+<p>Scan the QR code with your authenticator app and enter the generated code:</p>
+<img src="{{ qr_code }}" alt="MFA QR Code">
+<form method="post">
+    <input type="hidden" name="secret" value="{{ secret }}">
+    <label>Authenticator Code:</label>
+    <input type="text" name="token" required>
+    <button type="submit">Enable MFA</button>
+</form>
+{% endblock %}

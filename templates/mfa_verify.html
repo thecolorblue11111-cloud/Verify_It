@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>MFA Verification</h2>
+<form method="post">
+    <label>Authenticator Code:</label>
+    <input type="text" name="token" required>
+    <button type="submit">Verify</button>
+</form>
+{% endblock %}
