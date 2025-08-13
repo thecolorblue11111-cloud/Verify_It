@@ -3,50 +3,50 @@
 {% block title %}Dashboard - Proof Logger{% endblock %}
 
 {% block content %}
+<!-- MFA Status and Controls -->
+<div id="security" class="card" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1);">
+    <h3 style="margin: 0 0 12px 0; font-size: 1.1rem;">🔐 Security Settings</h3>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <p style="margin: 0; font-size: 0.9rem;">
+                <strong>Two-Factor Authentication:</strong> 
+                {% if current_user.mfa_enabled %}
+                    <span style="color: var(--accent);">✓ Enabled</span>
+                {% else %}
+                    <span style="color: #fbbf24;">⚠ Disabled</span>
+                {% endif %}
+            </p>
+            <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: var(--muted);">
+                {% if current_user.mfa_enabled %}
+                    Your account is protected with 2FA using an authenticator app.
+                {% else %}
+                    Enable 2FA for enhanced account security.
+                {% endif %}
+            </p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            {% if current_user.mfa_enabled %}
+                <form method="POST" action="{{ url_for('mfa_disable') }}" style="display: inline;" 
+                      onsubmit="return confirm('Are you sure you want to disable Two-Factor Authentication? This will make your account less secure.')">
+                    <button type="submit" class="button secondary" style="font-size: 0.85rem;">
+                        🔓 Disable 2FA
+                    </button>
+                </form>
+            {% else %}
+                <a href="{{ url_for('mfa_setup') }}" class="button" style="font-size: 0.85rem;">
+                    🔒 Enable 2FA
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h2>Welcome, {{ current_user.username }}</h2>
         <div style="display: flex; gap: 10px;">
             <a href="{{ url_for('admin_audit_logs') }}" class="button secondary">🔒 Admin</a>
             <a href="{{ url_for('new_log') }}" class="button">+ New Log</a>
-        </div>
-    </div>
-    
-    <!-- MFA Status and Controls -->
-    <div id="security" class="card" style="margin-bottom: 20px; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1);">
-        <h3 style="margin: 0 0 12px 0; font-size: 1.1rem;">🔐 Security Settings</h3>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <p style="margin: 0; font-size: 0.9rem;">
-                    <strong>Two-Factor Authentication:</strong> 
-                    {% if current_user.mfa_enabled %}
-                        <span style="color: var(--accent);">✓ Enabled</span>
-                    {% else %}
-                        <span style="color: #fbbf24;">⚠ Disabled</span>
-                    {% endif %}
-                </p>
-                <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: var(--muted);">
-                    {% if current_user.mfa_enabled %}
-                        Your account is protected with 2FA using an authenticator app.
-                    {% else %}
-                        Enable 2FA for enhanced account security.
-                    {% endif %}
-                </p>
-            </div>
-            <div style="display: flex; gap: 8px;">
-                {% if current_user.mfa_enabled %}
-                    <form method="POST" action="{{ url_for('mfa_disable') }}" style="display: inline;" 
-                          onsubmit="return confirm('Are you sure you want to disable Two-Factor Authentication? This will make your account less secure.')">
-                        <button type="submit" class="button secondary" style="font-size: 0.85rem;">
-                            🔓 Disable 2FA
-                        </button>
-                    </form>
-                {% else %}
-                    <a href="{{ url_for('mfa_setup') }}" class="button" style="font-size: 0.85rem;">
-                        🔒 Enable 2FA
-                    </a>
-                {% endif %}
-            </div>
         </div>
     </div>
     
