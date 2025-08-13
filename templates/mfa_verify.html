@@ -1,9 +1,39 @@
 {% extends "base.html" %}
+
+{% block title %}Two-Factor Authentication - Proof Logger{% endblock %}
+
 {% block content %}
-<h2>MFA Verification</h2>
-<form method="post">
-    <label>Authenticator Code:</label>
-    <input type="text" name="token" required>
-    <button type="submit">Verify</button>
-</form>
+<div class="card" style="max-width: 400px; margin: 0 auto;">
+    <h2>🔐 Two-Factor Authentication</h2>
+    <p style="margin-bottom: 20px; color: var(--muted);">
+        Enter the 6-digit code from your authenticator app to complete login.
+    </p>
+    
+    <form method="post">
+        <div class="form-row">
+            <div class="field">
+                <label for="token">Authenticator Code:</label>
+                <input type="text" id="token" name="token" required maxlength="6" 
+                       placeholder="123456" style="text-align: center; font-size: 1.4rem; letter-spacing: 0.3em;"
+                       autofocus>
+            </div>
+        </div>
+        
+        <button type="submit" class="button" style="width: 100%; margin-top: 16px;">
+            🔓 Verify & Login
+        </button>
+    </form>
+    
+    <div style="text-align: center; margin-top: 20px;">
+        <p style="font-size: 0.85rem; color: var(--muted);">
+            Having trouble? <a href="{{ url_for('login') }}" style="color: var(--accent);">Back to login</a>
+        </p>
+    </div>
+    
+    <div style="margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+        <p style="margin: 0; font-size: 0.8rem; color: var(--muted);">
+            <strong>💡 Tip:</strong> Open your authenticator app (Google Authenticator, Authy, etc.) and enter the current 6-digit code.
+        </p>
+    </div>
+</div>
 {% endblock %}
