@@ -1373,6 +1373,16 @@ def mfa_verify():
                 status='success'
             )
             
+            # Also create standard login audit log for consistency
+            create_audit_log(
+                action='login',
+                resource_type='user',
+                resource_id=user.id,
+                details={'username': user.username, 'method': 'mfa'},
+                user_id=user.id,
+                status='success'
+            )
+            
             flash("Logged in successfully.", "success")
             return redirect(url_for('dashboard'))
         else:
@@ -2202,6 +2212,16 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Add MFA columns to existing users table if they don't exist
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN mfa_secret TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     conn.commit()
     conn.close()
