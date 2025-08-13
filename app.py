@@ -14,7 +14,7 @@ from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request, Response, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import sqlite3
 import speech_recognition as sr
@@ -51,6 +51,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 from models import User, get_user_by_id
+import mfa_utils
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -1269,27 +1270,29 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
-        conn = sqlite3.connect('database.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT id, username, password_hash FROM users WHERE username = ?', (username,))
-        user_data = cursor.fetchone()
-        conn.close()
+        user = User.get_by_username(username)
         
-        if user_data and check_password_hash(user_data[2], password):
-            user = User(user_data[0], user_data[1])
-            login_user(user)
-            
-            # Create audit log for successful login
-            create_audit_log(
-                action='login',
-                resource_type='user',
-                resource_id=user_data[0],
-                details={'username': username},
-                user_id=user_data[0],
-                status='success'
-            )
-            
-            return redirect(url_for('dashboard'))
+        if user and check_password_hash(user.password_hash, password):
+            # Check if MFA is enabled
+            if user.mfa_enabled:
+                # Store user ID in session for MFA verification
+                session['pending_mfa_user'] = user.id
+                return redirect(url_for('mfa_verify'))
+            else:
+                # Login directly if MFA is not enabled
+                login_user(user)
+                
+                # Create audit log for successful login
+                create_audit_log(
+                    action='login',
+                    resource_type='user',
+                    resource_id=user.id,
+                    details={'username': username},
+                    user_id=user.id,
+                    status='success'
+                )
+                
+                return redirect(url_for('dashboard'))
         else:
             # Create audit log for failed login attempt
             create_audit_log(
@@ -1316,6 +1319,88 @@ def logout():
     
     logout_user()
     return redirect(url_for('index'))
+
+@app.route('/mfa/setup', methods=['GET', 'POST'])
+@login_required
+def mfa_setup():
+    if current_user.mfa_enabled:
+        flash("MFA is already enabled.", "info")
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        secret = request.form['secret']
+        token = request.form['token']
+        if mfa_utils.verify_totp(token, secret):
+            current_user.set_mfa(1, secret)
+            
+            # Create audit log for MFA setup
+            create_audit_log(
+                action='mfa_setup',
+                resource_type='user',
+                resource_id=current_user.id,
+                status='success'
+            )
+            
+            flash("MFA enabled successfully.", "success")
+            return redirect(url_for('dashboard'))
+        else:
+            flash("Invalid token. Please try again.", "danger")
+
+    secret = mfa_utils.generate_totp_secret()
+    uri = mfa_utils.get_totp_uri(current_user.username, secret)
+    qr_code = mfa_utils.generate_qr_code_base64(uri)
+    return render_template('mfa_setup.html', secret=secret, qr_code=qr_code)
+
+@app.route('/mfa/verify', methods=['GET', 'POST'])
+def mfa_verify():
+    if 'pending_mfa_user' not in session:
+        return redirect(url_for('login'))
+        
+    if request.method == 'POST':
+        token = request.form['token']
+        user = User.get_by_id(session['pending_mfa_user'])
+        if user and mfa_utils.verify_totp(token, user.mfa_secret):
+            login_user(user)
+            session.pop('pending_mfa_user', None)
+            
+            # Create audit log for successful MFA verification
+            create_audit_log(
+                action='mfa_verify',
+                resource_type='user',
+                resource_id=user.id,
+                details={'username': user.username},
+                user_id=user.id,
+                status='success'
+            )
+            
+            flash("Logged in successfully.", "success")
+            return redirect(url_for('dashboard'))
+        else:
+            # Create audit log for failed MFA verification
+            create_audit_log(
+                action='mfa_verify',
+                resource_type='user',
+                resource_id=session.get('pending_mfa_user'),
+                status='failure'
+            )
+            flash("Invalid MFA token.", "danger")
+    return render_template('mfa_verify.html')
+
+@app.route('/mfa/disable', methods=['POST'])
+@login_required
+def mfa_disable():
+    current_user.set_mfa(0, None)
+    
+    # Create audit log for MFA disable
+    create_audit_log(
+        action='mfa_disable',
+        resource_type='user',
+        resource_id=current_user.id,
+        status='success'
+    )
+    
+    flash("MFA disabled.", "info")
+    return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
 @login_required
@@ -1994,6 +2079,8 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            mfa_enabled INTEGER DEFAULT 0,
+            mfa_secret TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -2114,7 +2201,18 @@ def init_db():
         cursor.execute('ALTER TABLE logs ADD COLUMN email_verification_status TEXT DEFAULT \'none\'')
     except sqlite3.OperationalError:
         pass  # Column already exists
+
+    # Add MFA columns to existing users table if they don't exist
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN mfa_secret TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
 
