@@ -2202,16 +2202,6 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
-    # Add MFA columns to existing users table if they don't exist
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    try:
-        cursor.execute('ALTER TABLE users ADD COLUMN mfa_secret TEXT')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
 
     conn.commit()
     conn.close()
