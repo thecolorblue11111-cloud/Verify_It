@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Verification Result - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Verification Status -->
+    <div class="card" style="text-align: center; margin-bottom: 24px; padding: 32px;">
+        {% if result.is_valid %}
+            <div style="font-size: 3rem; margin-bottom: 16px;">✅</div>
+            <h1 style="font-size: 2rem; color: var(--accent); margin-bottom: 8px;">VERIFIED</h1>
+            <p style="font-size: 1.1rem; color: var(--muted);">
+                This log has been successfully verified and its integrity is confirmed.
+            </p>
+        {% else %}
+            <div style="font-size: 3rem; margin-bottom: 16px;">❌</div>
+            <h1 style="font-size: 2rem; color: #f87171; margin-bottom: 8px;">VERIFICATION FAILED</h1>
+            <p style="font-size: 1.1rem; color: var(--muted);">
+                This log could not be verified or has integrity issues.
+            </p>
+        {% endif %}
+        
+        <div class="security-badge" style="display: inline-block; margin-top: 16px;">
+            🔐 Cryptographically Verified
+        </div>
+    </div>
+
+    {% if result.log_data %}
+    <!-- Log Information -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">📋 Log Information</h2>
+        
+        <div class="table-wrap">
+            <table style="width: 100%;">
+                <tr>
+                    <td style="font-weight: bold; width: 200px; padding: 12px 8px;">Communication Method:</td>
+                    <td style="padding: 12px 8px;">{{ result.log_data.method|title }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold; padding: 12px 8px;">Recipient:</td>
+                    <td style="padding: 12px 8px;">{{ result.log_data.recipient }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold; padding: 12px 8px;">Timestamp:</td>
+                    <td style="padding: 12px 8px;">{{ result.log_data.timestamp }}</td>
+                </tr>
+                <tr>
+                    <td style="font-weight: bold; padding: 12px 8px;">Hash (SHA256):</td>
+                    <td style="padding: 12px 8px; font-family: monospace; font-size: 0.85rem; word-break: break-all;">{{ log_hash }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        {% if result.log_data.description %}
+        <div style="margin-top: 20px;">
+            <h4 style="margin-bottom: 8px;">Description:</h4>
+            <div style="padding: 12px; background: rgba(255,255,255,0.02); border-radius: 6px; font-size: 0.9rem;">
+                {{ result.log_data.description[:200] }}{% if result.log_data.description|length > 200 %}...{% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Verification Details -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">🔍 Verification Details</h2>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+            <!-- Hash Verification -->
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                    {% if result.hash_verified %}
+                        <span style="color: var(--accent);">✅</span> Hash Verification
+                    {% else %}
+                        <span style="color: #f87171;">❌</span> Hash Verification
+                    {% endif %}
+                </h4>
+                <p style="font-size: 0.9rem; color: var(--muted); margin: 0;">
+                    {% if result.hash_verified %}
+                        The provided hash matches our records and the log data is intact.
+                    {% else %}
+                        The hash could not be verified or doesn't match our records.
+                    {% endif %}
+                </p>
+            </div>
+            
+            <!-- Blockchain Timestamp -->
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+                    {% if result.timestamp_verified %}
+                        <span style="color: var(--accent);">✅</span> Blockchain Timestamp
+                    {% elif result.timestamp_status == 'pending' %}
+                        <span style="color: #fbbf24;">⏳</span> Blockchain Timestamp
+                    {% elif result.timestamp_status %}
+                        <span style="color: #f87171;">❌</span> Blockchain Timestamp
+                    {% else %}
+                        <span style="color: var(--muted);">➖</span> Blockchain Timestamp
+                    {% endif %}
+                </h4>
+                <p style="font-size: 0.9rem; color: var(--muted); margin: 0;">
+                    {% if result.timestamp_verified %}
+                        Confirmed in the Bitcoin blockchain via OpenTimestamps.
+                    {% elif result.timestamp_status == 'pending' %}
+                        Timestamp is pending blockchain confirmation.
+                    {% elif result.timestamp_status == 'failed' %}
+                        Blockchain timestamp verification failed.
+                    {% else %}
+                        No blockchain timestamp available for this log.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        
+        {% if result.verification_details.timestamp and result.verification_details.timestamp.details %}
+        <div style="margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 6px;">
+            <h5 style="margin-bottom: 8px;">Blockchain Details:</h5>
+            {% if result.verification_details.timestamp.details.blockchain %}
+                <p style="font-size: 0.8rem; margin: 4px 0;">Blockchain: {{ result.verification_details.timestamp.details.blockchain }}</p>
+            {% endif %}
+            {% if result.verification_details.timestamp.details.block_info %}
+                <p style="font-size: 0.8rem; margin: 4px 0;">{{ result.verification_details.timestamp.details.block_info }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Errors and Warnings -->
+    {% if result.errors or result.warnings %}
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">⚠️ Issues</h2>
+        
+        {% if result.errors %}
+        <div style="margin-bottom: 16px;">
+            <h4 style="color: #f87171; margin-bottom: 8px;">Errors:</h4>
+            {% for error in result.errors %}
+                <div style="padding: 8px 12px; background: rgba(248, 113, 113, 0.1); border-left: 3px solid #f87171; margin-bottom: 8px; border-radius: 4px;">
+                    {{ error }}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% if result.warnings %}
+        <div>
+            <h4 style="color: #fbbf24; margin-bottom: 8px;">Warnings:</h4>
+            {% for warning in result.warnings %}
+                <div style="padding: 8px 12px; background: rgba(251, 191, 36, 0.1); border-left: 3px solid #fbbf24; margin-bottom: 8px; border-radius: 4px;">
+                    {{ warning }}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">📄 Actions</h2>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+            {% if result.log_data %}
+                <a href="{{ url_for('verification_certificate', log_hash=log_hash) }}" class="button secondary">
+                    📋 Download Certificate (JSON)
+                </a>
+                <a href="{{ url_for('verification_certificate_pdf', log_hash=log_hash) }}" class="button secondary">
+                    📄 Download Certificate (PDF)
+                </a>
+            {% endif %}
+            <a href="{{ url_for('public_verify_index') }}" class="button">
+                🔍 Verify Another Log
+            </a>
+        </div>
+        
+        {% if qr_code %}
+        <div style="text-align: center; margin-top: 20px;">
+            <h4 style="margin-bottom: 12px;">📱 Share Verification</h4>
+            <div style="display: inline-block; padding: 16px; background: white; border-radius: 8px;">
+                <img src="{{ qr_code }}" alt="Verification QR Code" style="max-width: 200px;">
+            </div>
+            <p style="font-size: 0.8rem; color: var(--muted); margin-top: 8px;">
+                Scan this QR code to share the verification link
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Trust Information -->
+    <div class="card">
+        <h3 style="margin-bottom: 16px;">🛡️ Trust & Security</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Cryptographic Security</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    All logs are secured with SHA256 hashing and cryptographic integrity checks.
+                </p>
+            </div>
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Blockchain Proof</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    Timestamps are anchored to the Bitcoin blockchain for immutable proof of existence.
+                </p>
+            </div>
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Public Verification</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    Anyone can verify logs independently without requiring special access or accounts.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

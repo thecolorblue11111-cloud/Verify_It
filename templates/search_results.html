@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto;">
+    <!-- Search Results Header -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <h1 style="margin-bottom: 8px;">🔍 Search Results</h1>
+                <p style="color: var(--muted); margin: 0;">
+                    Found {{ total_count }} log{{ 's' if total_count != 1 else '' }}
+                    {% if search_filter.query %}matching "{{ search_filter.query }}"{% endif %}
+                </p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <a href="{{ url_for('advanced_search') }}" class="button secondary">
+                    🔍 New Search
+                </a>
+                <a href="{{ url_for('dashboard') }}" class="button secondary">
+                    📋 Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Filters -->
+    {% if search_filter.query or search_filter.method or search_filter.tags or search_filter.verification_status or search_filter.date_from or search_filter.date_to %}
+    <div class="card" style="margin-bottom: 24px; padding: 16px;">
+        <h4 style="margin-bottom: 12px;">🎯 Active Filters</h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            {% if search_filter.query %}
+                <span class="filter-badge">
+                    📝 Text: "{{ search_filter.query }}"
+                </span>
+            {% endif %}
+            {% if search_filter.method %}
+                <span class="filter-badge">
+                    📞 Method: {{ search_filter.method|title }}
+                </span>
+            {% endif %}
+            {% if search_filter.verification_status %}
+                <span class="filter-badge">
+                    {% if search_filter.verification_status == 'verified' %}✅{% elif search_filter.verification_status == 'pending' %}⏳{% else %}❌{% endif %}
+                    Status: {{ search_filter.verification_status|title }}
+                </span>
+            {% endif %}
+            {% if search_filter.tags %}
+                {% for tag in search_filter.tags %}
+                    <span class="filter-badge">
+                        🏷️ {{ tag }}
+                    </span>
+                {% endfor %}
+            {% endif %}
+            {% if search_filter.date_from %}
+                <span class="filter-badge">
+                    📅 From: {{ search_filter.date_from.strftime('%Y-%m-%d') }}
+                </span>
+            {% endif %}
+            {% if search_filter.date_to %}
+                <span class="filter-badge">
+                    📅 To: {{ search_filter.date_to.strftime('%Y-%m-%d') }}
+                </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Search Results -->
+    {% if results %}
+    <div class="card">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Recipient</th>
+                        <th>Description</th>
+                        <th>Date</th>
+                        <th>Verification</th>
+                        <th>Tags</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in results %}
+                    <tr>
+                        <td>
+                            <span style="display: inline-flex; align-items: center; gap: 4px;">
+                                {% if log.method == 'email' %}📧
+                                {% elif log.method == 'phone' %}📞
+                                {% elif log.method == 'sms' %}💬
+                                {% elif log.method == 'meeting' %}🤝
+                                {% elif log.method == 'video_call' %}📹
+                                {% elif log.method == 'letter' %}✉️
+                                {% elif log.method == 'chat' %}💭
+                                {% else %}📝
+                                {% endif %}
+                                {{ log.method|title }}
+                            </span>
+                        </td>
+                        <td>{{ log.recipient }}</td>
+                        <td>
+                            <div style="max-width: 300px;">
+                                {{ log.description[:100] }}{% if log.description|length > 100 %}...{% endif %}
+                            </div>
+                        </td>
+                        <td class="meta">{{ log.timestamp[:16] }}</td>
+                        <td>
+                            {% if log.verification_level == 'fully_verified' %}
+                                <span style="color: var(--accent); font-weight: bold;">✅ Fully Verified</span>
+                            {% elif log.verification_level == 'blockchain_verified' %}
+                                <span style="color: var(--accent);">⛓️ Blockchain</span>
+                            {% elif log.verification_level == 'email_verified' %}
+                                <span style="color: var(--accent);">📧 Email</span>
+                            {% elif log.verification_level == 'pending' %}
+                                <span style="color: #fbbf24;">⏳ Pending</span>
+                            {% else %}
+                                <span style="color: var(--muted);">➖ Unverified</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.tag_list %}
+                                <div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 150px;">
+                                    {% for tag in log.tag_list[:3] %}
+                                        <span class="tag-mini" style="background: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}; padding: 2px 6px; border-radius: 8px; font-size: 0.7rem;">
+                                            {{ tag.name }}
+                                        </span>
+                                    {% endfor %}
+                                    {% if log.tag_list|length > 3 %}
+                                        <span style="font-size: 0.7rem; color: var(--muted);">+{{ log.tag_list|length - 3 }}</span>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <span style="color: var(--muted); font-size: 0.8rem;">No tags</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <a href="{{ url_for('view_log', log_id=log.id) }}" class="button secondary" style="font-size: 0.8rem; padding: 4px 8px;">
+                                    👁️ View
+                                </a>
+                                {% if log.verification_hash %}
+                                    <a href="{{ url_for('public_verify_direct', log_hash=log.verification_hash) }}" class="button secondary" style="font-size: 0.8rem; padding: 4px 8px;" title="Public Verification">
+                                        🔍 Verify
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination Info -->
+        {% if total_count > results|length %}
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05); text-align: center;">
+            <p style="color: var(--muted); margin: 0;">
+                Showing {{ results|length }} of {{ total_count }} results
+                {% if total_count > 50 %}
+                    <br><small>Refine your search to see more specific results</small>
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <!-- No Results -->
+    <div class="card" style="text-align: center; padding: 40px;">
+        <div style="font-size: 3rem; margin-bottom: 16px;">🔍</div>
+        <h2 style="margin-bottom: 16px;">No Results Found</h2>
+        <p style="color: var(--muted); margin-bottom: 24px;">
+            We couldn't find any logs matching your search criteria.
+        </p>
+        
+        <div style="margin-bottom: 24px;">
+            <h4 style="margin-bottom: 12px;">Try:</h4>
+            <ul style="list-style: none; padding: 0; color: var(--muted);">
+                <li>• Using different keywords</li>
+                <li>• Removing some filters</li>
+                <li>• Expanding your date range</li>
+                <li>• Checking for typos</li>
+            </ul>
+        </div>
+        
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="{{ url_for('advanced_search') }}" class="button">
+                🔍 Try New Search
+            </a>
+            <a href="{{ url_for('dashboard') }}" class="button secondary">
+                📋 Back to Dashboard
+            </a>
+            <a href="{{ url_for('new_log') }}" class="button secondary">
+                ➕ Create New Log
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.filter-badge {
+    background: rgba(110, 231, 183, 0.1);
+    border: 1px solid rgba(110, 231, 183, 0.3);
+    color: var(--accent);
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.tag-mini {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+}
+</style>
+{% endblock %}

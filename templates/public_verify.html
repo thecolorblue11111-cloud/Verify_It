@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Public Verification - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Hero Section -->
+    <div class="card" style="text-align: center; margin-bottom: 24px; padding: 32px;">
+        <h1 style="font-size: 2.2rem; margin-bottom: 16px; color: var(--accent);">🔍 Public Verification</h1>
+        <p style="font-size: 1.1rem; color: var(--muted); margin-bottom: 24px;">
+            Verify the authenticity and integrity of communication logs using cryptographic hashes and blockchain timestamps.
+        </p>
+        <div class="security-badge" style="display: inline-block; margin-bottom: 16px;">
+            🛡️ Tamper-Proof Verification System
+        </div>
+    </div>
+
+    <!-- Verification Form -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">🔐 Verify a Log</h2>
+        <p style="color: var(--muted); margin-bottom: 20px;">
+            Enter the SHA256 hash of the log you want to verify. This hash was provided when the log was created.
+        </p>
+        
+        <form method="POST">
+            {{ form.hidden_tag() }}
+            
+            <div class="form-row">
+                <div class="field">
+                    {{ form.log_hash.label(class="form-label") }}
+                    {{ form.log_hash(class="form-control", placeholder="Enter 64-character SHA256 hash", style="font-family: monospace; font-size: 0.9rem;") }}
+                    {% if form.log_hash.errors %}
+                        <div class="field-errors">
+                            {% for error in form.log_hash.errors %}
+                                <span class="error">{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div style="margin-top: 8px; font-size: 0.8rem; color: var(--muted);">
+                        Example: a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit" class="button" style="margin-top: 16px;">
+                🔍 Verify Log
+            </button>
+        </form>
+    </div>
+
+    <!-- Platform Statistics -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h3 style="margin-bottom: 16px;">📊 Platform Statistics</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            <div style="text-align: center; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <div style="font-size: 1.8rem; font-weight: bold; color: var(--accent);">{{ stats.total_logs }}</div>
+                <div style="font-size: 0.9rem; color: var(--muted);">Total Logs</div>
+            </div>
+            <div style="text-align: center; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <div style="font-size: 1.8rem; font-weight: bold; color: var(--accent);">{{ stats.confirmed_timestamps }}</div>
+                <div style="font-size: 0.9rem; color: var(--muted);">Blockchain Verified</div>
+            </div>
+            <div style="text-align: center; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <div style="font-size: 1.8rem; font-weight: bold; color: var(--accent);">{{ "%.1f"|format(stats.timestamp_success_rate) }}%</div>
+                <div style="font-size: 0.9rem; color: var(--muted);">Success Rate</div>
+            </div>
+            <div style="text-align: center; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <div style="font-size: 1.8rem; font-weight: bold; color: var(--accent);">{{ stats.recent_verifications }}</div>
+                <div style="font-size: 0.9rem; color: var(--muted);">Verified Today</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card">
+        <h3 style="margin-bottom: 16px;">🔬 How Verification Works</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+            <div>
+                <h4 style="color: var(--accent); margin-bottom: 8px;">1. Hash Verification</h4>
+                <p style="font-size: 0.9rem; color: var(--muted);">
+                    We verify that the provided hash matches a log in our database and that the log data hasn't been tampered with.
+                </p>
+            </div>
+            <div>
+                <h4 style="color: var(--accent); margin-bottom: 8px;">2. Blockchain Timestamp</h4>
+                <p style="font-size: 0.9rem; color: var(--muted);">
+                    If available, we verify the OpenTimestamps blockchain proof to confirm when the log was created.
+                </p>
+            </div>
+            <div>
+                <h4 style="color: var(--accent); margin-bottom: 8px;">3. Integrity Check</h4>
+                <p style="font-size: 0.9rem; color: var(--muted);">
+                    We perform comprehensive integrity checks to ensure the log hasn't been modified since creation.
+                </p>
+            </div>
+        </div>
+        
+        <div style="margin-top: 24px; padding: 16px; background: rgba(110, 231, 183, 0.1); border-radius: 8px; border-left: 4px solid var(--accent);">
+            <p style="margin: 0; font-size: 0.9rem;">
+                <strong>🔒 Privacy:</strong> This verification system only reveals basic log metadata (method, recipient, timestamp). 
+                The full content and sensitive details remain private and are only accessible to the log owner.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

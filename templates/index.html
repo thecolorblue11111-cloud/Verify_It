@@ -1,35 +1,93 @@
 {% extends "base.html" %}
 
 {% block content %}
-<header>
-    <h1>📜 Proof Logger</h1>
-    <nav>
-        <a href="{{ url_for('login') }}">Login</a>
-        <a href="{{ url_for('register') }}" class="button">Register</a>
-    </nav>
-</header>
-
-<main>
-    <div class="card" style="text-align: center; max-width: 600px; margin: 0 auto;">
-        <h2>Track and Prove Your Communications</h2>
-        <p>Never lose proof of a call, email, visit, or text again. Create verifiable logs with timestamps, audio recordings, and file attachments.</p>
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Hero Section -->
+    <div class="card" style="text-align: center; margin-bottom: 32px; padding: 40px;">
+        <h1 style="font-size: 2.5rem; margin-bottom: 16px; color: var(--accent);">📜 Proof Logger</h1>
+        <p style="font-size: 1.2rem; color: var(--muted); margin-bottom: 32px; max-width: 600px; margin-left: auto; margin-right: auto;">
+            Track and prove your communications with cryptographic verification, blockchain timestamps, and comprehensive evidence logging.
+        </p>
         
-        <div style="margin-top: 24px;">
-            <a class="button" href="{{ url_for('register') }}">Get Started</a>
-            <a class="button secondary" href="{{ url_for('login') }}">Sign In</a>
+        <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+            <a class="button" href="{{ url_for('register') }}" style="font-size: 1.1rem; padding: 14px 24px;">
+                🚀 Get Started
+            </a>
+            <a class="button secondary" href="{{ url_for('login') }}" style="font-size: 1.1rem; padding: 14px 24px;">
+                🔓 Sign In
+            </a>
+            <a class="button secondary" href="{{ url_for('public_verify_index') }}" style="font-size: 1.1rem; padding: 14px 24px;">
+                🔍 Verify Log
+            </a>
+        </div>
+    </div>
+
+    <!-- Features Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 32px;">
+        <div class="card">
+            <h3 style="color: var(--accent); margin-bottom: 12px;">🔐 Cryptographic Security</h3>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="margin-bottom: 8px;">🔒 SHA256 verification hashes</li>
+                <li style="margin-bottom: 8px;">🛡️ Tamper-proof integrity checks</li>
+                <li style="margin-bottom: 8px;">🔐 Two-factor authentication</li>
+                <li style="margin-bottom: 8px;">📋 Public verification system</li>
+            </ul>
         </div>
         
-        <div style="margin-top: 32px; text-align: left;">
-            <h3>Features:</h3>
-            <ul style="list-style: none; padding: 0;">
-                <li>🎤 Record audio directly in your browser</li>
-                <li>📁 Upload evidence files and documents</li>
-                <li>🔐 SHA256 verification hashes for data integrity</li>
-                <li>📱 Mobile-friendly responsive design</li>
-                <li>📊 Export logs as PDF or ZIP files</li>
-                <li>🎯 Automatic speech-to-text transcription</li>
+        <div class="card">
+            <h3 style="color: var(--accent); margin-bottom: 12px;">⛓️ Blockchain Proof</h3>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="margin-bottom: 8px;">⏰ OpenTimestamps integration</li>
+                <li style="margin-bottom: 8px;">🌐 Bitcoin blockchain anchoring</li>
+                <li style="margin-bottom: 8px;">📜 Immutable proof of existence</li>
+                <li style="margin-bottom: 8px;">✅ Independent verification</li>
+            </ul>
+        </div>
+        
+        <div class="card">
+            <h3 style="color: var(--accent); margin-bottom: 12px;">📱 Rich Evidence</h3>
+            <ul style="list-style: none; padding: 0; margin: 0;">
+                <li style="margin-bottom: 8px;">🎤 Audio recording & transcription</li>
+                <li style="margin-bottom: 8px;">📁 File attachments & documents</li>
+                <li style="margin-bottom: 8px;">📧 Email metadata verification</li>
+                <li style="margin-bottom: 8px;">📊 Professional PDF reports</li>
             </ul>
         </div>
     </div>
-</main>
+
+    <!-- Trust Indicators -->
+    <div class="card" style="text-align: center; padding: 32px;">
+        <h2 style="margin-bottom: 24px;">🏆 Professional Evidence Platform</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px;">
+            <div>
+                <div style="font-size: 2rem; color: var(--accent); margin-bottom: 8px;">🔒</div>
+                <h4 style="margin-bottom: 8px;">Enterprise Security</h4>
+                <p style="font-size: 0.9rem; color: var(--muted); margin: 0;">
+                    Military-grade encryption and security measures
+                </p>
+            </div>
+            <div>
+                <div style="font-size: 2rem; color: var(--accent); margin-bottom: 8px;">⚖️</div>
+                <h4 style="margin-bottom: 8px;">Legal Grade</h4>
+                <p style="font-size: 0.9rem; color: var(--muted); margin: 0;">
+                    Suitable for legal proceedings and compliance
+                </p>
+            </div>
+            <div>
+                <div style="font-size: 2rem; color: var(--accent); margin-bottom: 8px;">🌐</div>
+                <h4 style="margin-bottom: 8px;">Public Verification</h4>
+                <p style="font-size: 0.9rem; color: var(--muted); margin: 0;">
+                    Anyone can verify authenticity independently
+                </p>
+            </div>
+            <div>
+                <div style="font-size: 2rem; color: var(--accent); margin-bottom: 8px;">📱</div>
+                <h4 style="margin-bottom: 8px;">Mobile Ready</h4>
+                <p style="font-size: 0.9rem; color: var(--muted); margin: 0;">
+                    Responsive design works on all devices
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
