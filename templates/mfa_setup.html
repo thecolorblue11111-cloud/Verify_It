@@ -1,12 +1,49 @@
 {% extends "base.html" %}
+
+{% block title %}Enable Two-Factor Authentication - Proof Logger{% endblock %}
+
 {% block content %}
-<h2>Set up MFA</h2>
-<p>Scan the QR code with your authenticator app and enter the generated code:</p>
-<img src="{{ qr_code }}" alt="MFA QR Code">
-<form method="post">
-    <input type="hidden" name="secret" value="{{ secret }}">
-    <label>Authenticator Code:</label>
-    <input type="text" name="token" required>
-    <button type="submit">Enable MFA</button>
-</form>
+<div class="card" style="max-width: 500px; margin: 0 auto;">
+    <h2>🔒 Enable Two-Factor Authentication</h2>
+    <p style="margin-bottom: 20px; color: var(--muted);">
+        Secure your account with an additional layer of protection using your smartphone.
+    </p>
+    
+    <div style="margin-bottom: 24px;">
+        <h3 style="font-size: 1rem; margin-bottom: 12px;">Step 1: Scan QR Code</h3>
+        <p style="font-size: 0.9rem; margin-bottom: 16px; color: var(--muted);">
+            Use your authenticator app (Google Authenticator, Authy, etc.) to scan this QR code:
+        </p>
+        <div style="text-align: center; margin-bottom: 16px; padding: 16px; background: white; border-radius: 8px; display: inline-block;">
+            <img src="{{ qr_code }}" alt="MFA QR Code" style="max-width: 200px;">
+        </div>
+        <p style="font-size: 0.8rem; color: var(--muted);">
+            Can't scan? Manual entry key: <code style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px;">{{ secret }}</code>
+        </p>
+    </div>
+    
+    <div style="margin-bottom: 24px;">
+        <h3 style="font-size: 1rem; margin-bottom: 12px;">Step 2: Enter Verification Code</h3>
+        <form method="post">
+            <input type="hidden" name="secret" value="{{ secret }}">
+            <div class="form-row">
+                <div class="field">
+                    <label for="token">6-digit code from your authenticator app:</label>
+                    <input type="text" id="token" name="token" required maxlength="6" 
+                           placeholder="123456" style="text-align: center; font-size: 1.2rem; letter-spacing: 0.2em;">
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button type="submit" class="button">🔒 Enable 2FA</button>
+                <a href="{{ url_for('dashboard') }}" class="button secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+    
+    <div style="padding: 16px; background: rgba(255,255,255,0.05); border-radius: 6px; border-left: 3px solid var(--accent);">
+        <p style="margin: 0; font-size: 0.85rem; color: var(--muted);">
+            <strong>💡 Tip:</strong> After enabling 2FA, you'll need both your password and a code from your authenticator app to log in.
+        </p>
+    </div>
+</div>
 {% endblock %}
