@@ -16,6 +16,9 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, send_file, after_this_request, Response, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import sqlite3
 import speech_recognition as sr
 from email_validator import validate_email, EmailNotValidError
@@ -28,11 +31,47 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import qrcode
 
+# Import security modules
+from security import (
+    sanitize_input, validate_file_upload, scan_file_for_threats,
+    generate_file_hash, security_headers, log_security_event
+)
+from forms import (
+    LoginForm, RegistrationForm, LogCreationForm, MFASetupForm, 
+    MFAVerifyForm, SearchForm, PublicVerificationForm, ContactForm
+)
+
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production")
+
+# Enhanced security configuration
+app.config.update(
+    SECRET_KEY=os.environ.get("SESSION_SECRET", "dev-secret-key-change-in-production"),
+    WTF_CSRF_TIME_LIMIT=3600,  # CSRF token valid for 1 hour
+    WTF_CSRF_SSL_STRICT=False,  # Set to True in production with HTTPS
+    SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=1800,  # 30 minutes
+)
+
+# Initialize security extensions
+csrf = CSRFProtect(app)
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",  # Use Redis in production: "redis://localhost:6379"
+)
+limiter.init_app(app)
 
 # Configure upload settings
 UPLOAD_FOLDER = 'uploads'
@@ -45,10 +84,13 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 # Ensure upload directory exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Initialize Flask-Login
+# Initialize Flask-Login with enhanced security
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'info'
+login_manager.session_protection = 'strong'  # Enhanced session protection
 
 from models import User, get_user_by_id
 import mfa_utils
@@ -56,6 +98,27 @@ import mfa_utils
 @login_manager.user_loader
 def load_user(user_id):
     return get_user_by_id(int(user_id))
+
+# Security headers middleware
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    return security_headers(response)
+
+# Security event logging
+@app.before_request
+def log_request():
+    """Log security-relevant requests"""
+    if request.endpoint in ['login', 'register', 'mfa_verify']:
+        log_security_event(
+            'request',
+            {
+                'endpoint': request.endpoint,
+                'method': request.method,
+                'ip': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent', 'unknown')
+            }
+        )
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -1218,15 +1281,14 @@ def index():
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")  # Rate limiting for registration attempts
 def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        
-        if not username or not email or not password:
-            flash('All fields are required')
-            return render_template('register.html')
+    form = RegistrationForm()
+    
+    if form.validate_on_submit():
+        username = form.username.data
+        email = form.email.data
+        password = form.password.data
         
         # Check if user already exists
         conn = sqlite3.connect('database.db')
@@ -1234,45 +1296,76 @@ def register():
         
         cursor.execute('SELECT id FROM users WHERE username = ? OR email = ?', (username, email))
         if cursor.fetchone():
-            flash('Username or email already exists')
             conn.close()
-            return render_template('register.html')
+            flash('Username or email already exists.', 'danger')
+            return render_template('register.html', form=form)
         
-        # Create new user
-        password_hash = generate_password_hash(password)
-        cursor.execute('''
-            INSERT INTO users (username, email, password_hash, created_at)
-            VALUES (?, ?, ?, ?)
-        ''', (username, email, password_hash, datetime.now()))
-        
-        user_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
-        # Create audit log for successful registration
-        create_audit_log(
-            action='register',
-            resource_type='user',
-            resource_id=user_id,
-            details={'username': username, 'email': email},
-            user_id=user_id,
-            status='success'
-        )
-        
-        flash('Registration successful! Please log in.')
-        return redirect(url_for('login'))
+        try:
+            # Create new user with enhanced security
+            password_hash = generate_password_hash(password, method='pbkdf2:sha256', salt_length=16)
+            cursor.execute('''
+                INSERT INTO users (username, email, password_hash, created_at)
+                VALUES (?, ?, ?, ?)
+            ''', (username, email, password_hash, datetime.now()))
+            
+            user_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            # Log successful registration
+            log_security_event(
+                'registration_success',
+                {'username': username, 'email': email, 'user_id': user_id},
+                'INFO'
+            )
+            
+            # Create audit log for successful registration
+            create_audit_log(
+                action='register',
+                resource_type='user',
+                resource_id=user_id,
+                details={'username': username, 'email': email},
+                user_id=user_id,
+                status='success'
+            )
+            
+            flash('Registration successful! Please log in.', 'success')
+            return redirect(url_for('login'))
+            
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            
+            # Log registration failure
+            log_security_event(
+                'registration_failure',
+                {'username': username, 'email': email, 'error': str(e)},
+                'ERROR'
+            )
+            
+            flash('Registration failed. Please try again.', 'danger')
     
-    return render_template('register.html')
+    return render_template('register.html', form=form)
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")  # Rate limiting for login attempts
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    form = LoginForm()
+    
+    if form.validate_on_submit():
+        username = form.username.data
+        password = form.password.data
         
         user = User.get_by_username(username)
         
         if user and check_password_hash(user.password_hash, password):
+            # Log successful authentication
+            log_security_event(
+                'login_success',
+                {'username': username, 'user_id': user.id},
+                'INFO'
+            )
+            
             # Check if MFA is enabled
             if user.mfa_enabled:
                 # Store user ID in session for MFA verification
@@ -1287,13 +1380,21 @@ def login():
                     action='login',
                     resource_type='user',
                     resource_id=user.id,
-                    details={'username': username},
+                    details={'username': username, 'method': 'password'},
                     user_id=user.id,
                     status='success'
                 )
                 
+                flash('Logged in successfully.', 'success')
                 return redirect(url_for('dashboard'))
         else:
+            # Log failed login attempt
+            log_security_event(
+                'login_failure',
+                {'username': username, 'reason': 'invalid_credentials'},
+                'WARNING'
+            )
+            
             # Create audit log for failed login attempt
             create_audit_log(
                 action='login',
@@ -1302,9 +1403,9 @@ def login():
                 user_id=None,
                 status='failure'
             )
-            flash('Invalid username or password')
+            flash('Invalid username or password.', 'danger')
     
-    return render_template('login.html')
+    return render_template('login.html', form=form)
 
 @app.route('/logout')
 @login_required

@@ -4,27 +4,50 @@
 
 {% block content %}
 <div class="card" style="max-width: 400px; margin: 0 auto;">
-    <h2>Login</h2>
+    <h2>🔐 Secure Login</h2>
+    
     <form method="POST">
+        {{ form.hidden_tag() }}
+        
         <div class="form-row">
             <div class="field">
-                <label for="username">Username:</label>
-                <input type="text" id="username" name="username" required>
+                {{ form.username.label(class="form-label") }}
+                {{ form.username(class="form-control") }}
+                {% if form.username.errors %}
+                    <div class="field-errors">
+                        {% for error in form.username.errors %}
+                            <span class="error">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </div>
         </div>
         
         <div class="form-row">
             <div class="field">
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password" required>
+                {{ form.password.label(class="form-label") }}
+                {{ form.password(class="form-control") }}
+                {% if form.password.errors %}
+                    <div class="field-errors">
+                        {% for error in form.password.errors %}
+                            <span class="error">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </div>
         </div>
         
-        <button type="submit" class="button">Login</button>
+        <button type="submit" class="button">🔓 Login</button>
     </form>
     
     <p style="margin-top: 16px; text-align: center;">
         Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
     </p>
+    
+    <div style="margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+        <p style="margin: 0; font-size: 0.8rem; color: var(--muted);">
+            <strong>🛡️ Security:</strong> This site uses advanced security measures including CSRF protection, rate limiting, and secure password hashing.
+        </p>
+    </div>
 </div>
 {% endblock %}
