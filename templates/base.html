@@ -38,6 +38,24 @@
         {% endwith %}
         
         {% block content %}{% endblock %}
+        
+        <!-- Footer -->
+        <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); text-align: center;">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 16px;">
+                <a href="{{ url_for('privacy_policy') }}" style="color: var(--muted); text-decoration: none; font-size: 0.9rem;">Privacy Policy</a>
+                <a href="{{ url_for('terms_of_use') }}" style="color: var(--muted); text-decoration: none; font-size: 0.9rem;">Terms of Use</a>
+                <a href="{{ url_for('public_verify_index') }}" style="color: var(--muted); text-decoration: none; font-size: 0.9rem;">Public Verification</a>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('admin_audit_logs') }}" style="color: var(--muted); text-decoration: none; font-size: 0.9rem;">Security Logs</a>
+                {% endif %}
+            </div>
+            <p style="margin: 0; font-size: 0.8rem; color: var(--muted);">
+                © {{ "now"|strftime("%Y") }} Proof Logger - Professional Evidence Platform
+            </p>
+            <p style="margin: 4px 0 0 0; font-size: 0.7rem; color: var(--muted);">
+                🔒 Secured with cryptographic verification and blockchain timestamps
+            </p>
+        </footer>
     </div>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.js"></script>

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Header -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h1 style="margin-bottom: 16px;">🔒 Privacy Policy</h1>
+        <p style="color: var(--muted); margin: 0;">
+            Last updated: {{ "now"|strftime("%B %d, %Y") }}
+        </p>
+    </div>
+
+    <!-- Introduction -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Introduction</h2>
+        <p style="margin-bottom: 16px;">
+            Proof Logger ("we," "our," or "us") is committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our communication logging and verification service.
+        </p>
+        <p style="margin: 0;">
+            By using Proof Logger, you agree to the collection and use of information in accordance with this policy.
+        </p>
+    </div>
+
+    <!-- Information We Collect -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Information We Collect</h2>
+        
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Personal Information</h3>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li><strong>Account Information:</strong> Username, email address, and encrypted password</li>
+            <li><strong>Communication Logs:</strong> Details of communications you choose to log, including method, recipient, description, and timestamps</li>
+            <li><strong>File Attachments:</strong> Documents, images, audio recordings, and other files you upload</li>
+            <li><strong>Authentication Data:</strong> Two-factor authentication settings and backup codes</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Technical Information</h3>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li><strong>Usage Data:</strong> Information about how you use our service, including access times and features used</li>
+            <li><strong>Device Information:</strong> IP address, browser type, operating system, and device identifiers</li>
+            <li><strong>Security Logs:</strong> Authentication attempts, security events, and audit trail information</li>
+            <li><strong>Verification Data:</strong> Cryptographic hashes, blockchain timestamps, and verification certificates</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Automatically Collected Information</h3>
+        <ul style="margin: 0; padding-left: 20px;">
+            <li><strong>Cookies and Tracking:</strong> Session cookies for authentication and security</li>
+            <li><strong>Analytics:</strong> Aggregated usage statistics to improve our service</li>
+            <li><strong>Error Logs:</strong> Technical information to diagnose and fix issues</li>
+        </ul>
+    </div>
+
+    <!-- How We Use Your Information -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">How We Use Your Information</h2>
+        
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Service Provision</h3>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li>Create and maintain your communication logs</li>
+            <li>Generate cryptographic verification hashes</li>
+            <li>Create blockchain timestamps for immutable proof</li>
+            <li>Provide public verification services</li>
+            <li>Enable search and organization features</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Security and Authentication</h3>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li>Authenticate your identity and maintain account security</li>
+            <li>Detect and prevent unauthorized access</li>
+            <li>Monitor for suspicious activity and security threats</li>
+            <li>Maintain audit logs for security purposes</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Service Improvement</h3>
+        <ul style="margin: 0; padding-left: 20px;">
+            <li>Analyze usage patterns to improve functionality</li>
+            <li>Develop new features and capabilities</li>
+            <li>Optimize performance and reliability</li>
+            <li>Provide customer support and technical assistance</li>
+        </ul>
+    </div>
+
+    <!-- Information Sharing -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Information Sharing and Disclosure</h2>
+        
+        <div style="padding: 16px; background: rgba(110, 231, 183, 0.1); border-radius: 8px; border: 1px solid rgba(110, 231, 183, 0.3); margin-bottom: 20px;">
+            <p style="margin: 0; font-weight: 600;">
+                🔒 <strong>We do not sell, trade, or rent your personal information to third parties.</strong>
+            </p>
+        </div>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Limited Sharing</h3>
+        <p style="margin-bottom: 16px;">We may share your information only in the following circumstances:</p>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li><strong>Public Verification:</strong> Verification hashes and basic metadata for public verification (no personal content)</li>
+            <li><strong>Legal Requirements:</strong> When required by law, court order, or government request</li>
+            <li><strong>Security Protection:</strong> To protect our rights, property, or safety, or that of our users</li>
+            <li><strong>Service Providers:</strong> With trusted third-party services that help us operate (under strict confidentiality agreements)</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Blockchain Information</h3>
+        <p style="margin: 0;">
+            Cryptographic hashes of your logs may be permanently recorded on public blockchains for timestamping purposes. These hashes do not contain any personal information or log content.
+        </p>
+    </div>
+
+    <!-- Data Security -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Data Security</h2>
+        
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Security Measures</h3>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li><strong>Encryption:</strong> All data is encrypted in transit and at rest using industry-standard encryption</li>
+            <li><strong>Access Controls:</strong> Strict access controls and authentication requirements</li>
+            <li><strong>Security Monitoring:</strong> Continuous monitoring for security threats and vulnerabilities</li>
+            <li><strong>Regular Audits:</strong> Regular security audits and penetration testing</li>
+            <li><strong>Secure Infrastructure:</strong> Hosted on secure, compliant infrastructure</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Your Security Responsibilities</h3>
+        <ul style="margin: 0; padding-left: 20px;">
+            <li>Keep your login credentials secure and confidential</li>
+            <li>Enable two-factor authentication for enhanced security</li>
+            <li>Report any suspicious activity immediately</li>
+            <li>Use strong, unique passwords</li>
+        </ul>
+    </div>
+
+    <!-- Your Rights -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Your Privacy Rights</h2>
+        
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Access and Control</h3>
+        <ul style="margin-bottom: 20px; padding-left: 20px;">
+            <li><strong>Access:</strong> View and download all your personal data</li>
+            <li><strong>Correction:</strong> Update or correct inaccurate information</li>
+            <li><strong>Deletion:</strong> Request deletion of your account and associated data</li>
+            <li><strong>Portability:</strong> Export your data in a machine-readable format</li>
+            <li><strong>Restriction:</strong> Limit how we process your information</li>
+        </ul>
+
+        <h3 style="margin-bottom: 12px; color: var(--accent);">Data Retention</h3>
+        <p style="margin: 0;">
+            We retain your information for as long as your account is active or as needed to provide services. You may delete your account at any time, though some information may be retained for legal or security purposes as required by law.
+        </p>
+    </div>
+
+    <!-- Cookies and Tracking -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Cookies and Tracking</h2>
+        <p style="margin-bottom: 16px;">
+            We use cookies and similar technologies to:
+        </p>
+        <ul style="margin-bottom: 16px; padding-left: 20px;">
+            <li>Maintain your login session</li>
+            <li>Remember your preferences</li>
+            <li>Enhance security and prevent fraud</li>
+            <li>Analyze usage patterns (anonymized)</li>
+        </ul>
+        <p style="margin: 0;">
+            You can control cookie settings through your browser, though disabling cookies may affect functionality.
+        </p>
+    </div>
+
+    <!-- International Users -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">International Users</h2>
+        <p style="margin-bottom: 16px;">
+            Proof Logger is designed to comply with international privacy regulations, including:
+        </p>
+        <ul style="margin-bottom: 16px; padding-left: 20px;">
+            <li><strong>GDPR:</strong> European Union General Data Protection Regulation</li>
+            <li><strong>CCPA:</strong> California Consumer Privacy Act</li>
+            <li><strong>PIPEDA:</strong> Personal Information Protection and Electronic Documents Act (Canada)</li>
+        </ul>
+        <p style="margin: 0;">
+            If you are located outside our primary jurisdiction, your information may be transferred to and processed in countries with different privacy laws.
+        </p>
+    </div>
+
+    <!-- Changes to Policy -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-bottom: 16px;">Changes to This Policy</h2>
+        <p style="margin-bottom: 16px;">
+            We may update this Privacy Policy from time to time. We will notify you of any changes by:
+        </p>
+        <ul style="margin-bottom: 16px; padding-left: 20px;">
+            <li>Posting the new Privacy Policy on this page</li>
+            <li>Updating the "Last updated" date</li>
+            <li>Sending email notifications for significant changes</li>
+        </ul>
+        <p style="margin: 0;">
+            Your continued use of the service after changes constitutes acceptance of the updated policy.
+        </p>
+    </div>
+
+    <!-- Contact Information -->
+    <div class="card">
+        <h2 style="margin-bottom: 16px;">Contact Us</h2>
+        <p style="margin-bottom: 16px;">
+            If you have questions about this Privacy Policy or our privacy practices, please contact us:
+        </p>
+        <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+            <p style="margin: 0 0 8px 0;"><strong>Email:</strong> privacy@prooflogger.com</p>
+            <p style="margin: 0 0 8px 0;"><strong>Address:</strong> [Your Business Address]</p>
+            <p style="margin: 0;"><strong>Response Time:</strong> We will respond to privacy inquiries within 30 days</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1556,7 +1556,8 @@ def dashboard():
 @app.route('/new_log')
 @login_required
 def new_log():
-    return render_template('new_log.html')
+    form = LogCreationForm()
+    return render_template('log_wizard.html', form=form)
 
 @app.route('/create_log', methods=['POST'])
 @login_required
@@ -1678,6 +1679,17 @@ def create_log():
             flash('Log created successfully with email verification, but blockchain timestamping failed.')
         else:
             flash('Log created successfully, but blockchain timestamping failed.')
+    
+    # Handle tags
+    tags_input = request.form.get('tags', '')
+    if tags_input.strip():
+        tag_names = [tag.strip() for tag in tags_input.split(',') if tag.strip()]
+        if tag_names:
+            success = add_tags_to_log(log_id, tag_names)
+            if success:
+                logging.info(f"Added {len(tag_names)} tags to log {log_id}")
+            else:
+                logging.warning(f"Failed to add tags to log {log_id}")
     
     return redirect(url_for('dashboard'))
 
@@ -2529,6 +2541,17 @@ def create_tag_api():
         return jsonify({'success': True, 'tag_id': tag_id, 'name': tag_name, 'color': color})
     else:
         return jsonify({'error': 'Failed to create tag'}), 500
+
+# Legal Pages Routes
+@app.route('/privacy')
+def privacy_policy():
+    """Privacy policy page"""
+    return render_template('privacy_policy.html')
+
+@app.route('/terms')
+def terms_of_use():
+    """Terms of use page"""
+    return render_template('terms_of_use.html')
 
 def init_db():
     """Initialize the database with required tables"""
