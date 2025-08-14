@@ -45,6 +45,10 @@ from verification import (
     create_verification_qr_code, get_verification_statistics,
     log_verification_attempt
 )
+from search_and_tags import (
+    create_tags_table, SearchFilter, search_logs, get_all_tags,
+    add_tags_to_log, get_log_tags, get_search_suggestions
+)
 
 # Configure logging
 logging.basicConfig(
@@ -2404,6 +2408,128 @@ def generate_verification_pdf(verification_result, log_hash):
         logging.error(f"PDF generation failed: {e}")
         return None
 
+# Advanced Search and Tagging Routes
+@app.route('/search')
+@login_required
+def advanced_search():
+    """Advanced search page for logs"""
+    form = SearchForm()
+    all_tags = get_all_tags()
+    
+    # Get recent searches or suggestions
+    suggestions = get_search_suggestions(current_user.id, "")
+    
+    return render_template('advanced_search.html', 
+                         form=form, 
+                         tags=all_tags, 
+                         suggestions=suggestions)
+
+@app.route('/search', methods=['POST'])
+@login_required
+@limiter.limit("30 per minute")
+def search_logs_route():
+    """Handle search form submission"""
+    form = SearchForm()
+    all_tags = get_all_tags()
+    
+    if form.validate_on_submit():
+        # Build search filter
+        search_filter = SearchFilter()
+        search_filter.query = form.query.data or ""
+        search_filter.method = form.method.data or ""
+        search_filter.recipient = form.recipient.data or ""
+        search_filter.verification_status = form.verification_status.data or ""
+        
+        # Parse tags
+        if form.tags.data:
+            search_filter.tags = [tag.strip() for tag in form.tags.data.split(',') if tag.strip()]
+        
+        # Parse dates
+        if form.date_from.data:
+            try:
+                from datetime import datetime
+                search_filter.date_from = datetime.strptime(form.date_from.data, '%Y-%m-%d')
+            except ValueError:
+                flash('Invalid start date format', 'danger')
+        
+        if form.date_to.data:
+            try:
+                from datetime import datetime
+                search_filter.date_to = datetime.strptime(form.date_to.data, '%Y-%m-%d')
+            except ValueError:
+                flash('Invalid end date format', 'danger')
+        
+        # Perform search
+        results, total_count = search_logs(current_user.id, search_filter, limit=50)
+        
+        # Log search activity
+        create_audit_log(
+            action='search_logs',
+            resource_type='log',
+            details={
+                'query': search_filter.query[:100],  # Truncate for privacy
+                'filters': {
+                    'method': search_filter.method,
+                    'verification_status': search_filter.verification_status,
+                    'has_tags': len(search_filter.tags) > 0,
+                    'has_date_range': bool(search_filter.date_from or search_filter.date_to)
+                },
+                'result_count': len(results),
+                'total_matches': total_count
+            },
+            status='success'
+        )
+        
+        return render_template('search_results.html', 
+                             results=results, 
+                             total_count=total_count,
+                             search_filter=search_filter,
+                             form=form)
+    
+    return render_template('advanced_search.html', 
+                         form=form, 
+                         tags=all_tags)
+
+@app.route('/api/search/suggestions')
+@login_required
+@limiter.limit("60 per minute")
+def search_suggestions_api():
+    """API endpoint for search suggestions"""
+    query = request.args.get('q', '').strip()
+    if not query or len(query) < 2:
+        return jsonify({'suggestions': {}})
+    
+    suggestions = get_search_suggestions(current_user.id, query)
+    return jsonify({'suggestions': suggestions})
+
+@app.route('/tags')
+@login_required
+def manage_tags():
+    """Tag management page"""
+    all_tags = get_all_tags()
+    return render_template('manage_tags.html', tags=all_tags)
+
+@app.route('/api/tags', methods=['POST'])
+@login_required
+@limiter.limit("20 per minute")
+def create_tag_api():
+    """API endpoint to create a new tag"""
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify({'error': 'Tag name required'}), 400
+    
+    tag_name = data['name'].strip()
+    color = data.get('color', '#6ee7b7')
+    
+    if not tag_name or len(tag_name) > 50:
+        return jsonify({'error': 'Invalid tag name'}), 400
+    
+    tag_id = get_or_create_tag(tag_name, color)
+    if tag_id:
+        return jsonify({'success': True, 'tag_id': tag_id, 'name': tag_name, 'color': color})
+    else:
+        return jsonify({'error': 'Failed to create tag'}), 500
+
 def init_db():
     """Initialize the database with required tables"""
     conn = sqlite3.connect('database.db')
@@ -2552,6 +2678,9 @@ def init_db():
 
     conn.commit()
     conn.close()
+    
+    # Initialize tags tables
+    create_tags_table()
 
 # Initialize database on startup
 init_db()

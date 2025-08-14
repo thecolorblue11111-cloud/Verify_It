@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Tags - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Header -->
+    <div class="card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <h1 style="margin-bottom: 8px;">🏷️ Manage Tags</h1>
+                <p style="color: var(--muted); margin: 0;">
+                    Organize your logs with custom tags. Create, edit, and manage your tagging system.
+                </p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <a href="{{ url_for('dashboard') }}" class="button secondary">
+                    📋 Dashboard
+                </a>
+                <a href="{{ url_for('advanced_search') }}" class="button secondary">
+                    🔍 Search
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create New Tag -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h3 style="margin-bottom: 16px;">➕ Create New Tag</h3>
+        <form id="create-tag-form" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+            <div class="field" style="flex: 1; min-width: 200px;">
+                <label class="form-label">Tag Name</label>
+                <input type="text" id="tag-name" placeholder="Enter tag name..." 
+                       style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit;"
+                       maxlength="50" required>
+            </div>
+            <div class="field" style="min-width: 120px;">
+                <label class="form-label">Color</label>
+                <select id="tag-color" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: inherit;">
+                    <option value="#6ee7b7" style="background: #6ee7b7; color: #042024;">🟢 Green</option>
+                    <option value="#60a5fa" style="background: #60a5fa; color: #042024;">🔵 Blue</option>
+                    <option value="#f87171" style="background: #f87171; color: #042024;">🔴 Red</option>
+                    <option value="#fbbf24" style="background: #fbbf24; color: #042024;">🟡 Yellow</option>
+                    <option value="#a78bfa" style="background: #a78bfa; color: #042024;">🟣 Purple</option>
+                    <option value="#fb7185" style="background: #fb7185; color: #042024;">🩷 Pink</option>
+                    <option value="#34d399" style="background: #34d399; color: #042024;">🟢 Emerald</option>
+                    <option value="#94a3b8" style="background: #94a3b8; color: #042024;">⚪ Gray</option>
+                </select>
+            </div>
+            <button type="submit" class="button" style="padding: 8px 16px;">
+                ➕ Create Tag
+            </button>
+        </form>
+    </div>
+
+    <!-- Existing Tags -->
+    {% if tags %}
+    <div class="card">
+        <h3 style="margin-bottom: 16px;">📋 Your Tags ({{ tags|length }})</h3>
+        
+        <!-- Tags Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
+            {% for tag in tags %}
+            <div class="tag-card" style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <span class="tag-badge" style="background: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                                {{ tag.name }}
+                            </span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--muted);">
+                            Used {{ tag.usage_count }} time{{ 's' if tag.usage_count != 1 else '' }}
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--muted); margin-top: 2px;">
+                            Created: {{ tag.created_at[:10] }}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 4px;">
+                        <button onclick="editTag({{ tag.id }}, '{{ tag.name }}', '{{ tag.color }}')" 
+                                class="button secondary" style="font-size: 0.7rem; padding: 4px 6px;" title="Edit Tag">
+                            ✏️
+                        </button>
+                        {% if tag.usage_count == 0 %}
+                        <button onclick="deleteTag({{ tag.id }}, '{{ tag.name }}')" 
+                                class="button secondary" style="font-size: 0.7rem; padding: 4px 6px; color: #f87171;" title="Delete Tag">
+                            🗑️
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if tag.usage_count > 0 %}
+                <div style="margin-top: 8px;">
+                    <a href="{{ url_for('advanced_search') }}?tags={{ tag.name }}" 
+                       class="button secondary" style="font-size: 0.8rem; padding: 4px 8px; width: 100%; text-align: center;">
+                        🔍 View Logs with this Tag
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Tag Statistics -->
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);">
+            <h4 style="margin-bottom: 12px;">📊 Tag Statistics</h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent);">{{ tags|length }}</div>
+                    <div style="font-size: 0.8rem; color: var(--muted);">Total Tags</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent);">{{ tags|selectattr('usage_count', 'gt', 0)|list|length }}</div>
+                    <div style="font-size: 0.8rem; color: var(--muted);">Used Tags</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent);">{{ tags|sum(attribute='usage_count') }}</div>
+                    <div style="font-size: 0.8rem; color: var(--muted);">Total Usage</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent);">
+                        {% if tags|selectattr('usage_count', 'gt', 0)|list|length > 0 %}
+                            {{ "%.1f"|format((tags|sum(attribute='usage_count')) / (tags|selectattr('usage_count', 'gt', 0)|list|length)) }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--muted);">Avg. Usage</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- No Tags Yet -->
+    <div class="card" style="text-align: center; padding: 40px;">
+        <div style="font-size: 3rem; margin-bottom: 16px;">🏷️</div>
+        <h2 style="margin-bottom: 16px;">No Tags Yet</h2>
+        <p style="color: var(--muted); margin-bottom: 24px;">
+            Create your first tag to start organizing your logs.
+        </p>
+        <div style="margin-bottom: 24px;">
+            <h4 style="margin-bottom: 12px;">Tag Ideas:</h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+                <span onclick="document.getElementById('tag-name').value='important'; document.getElementById('tag-color').value='#f87171';" 
+                      style="cursor: pointer; background: rgba(248, 113, 113, 0.2); color: #f87171; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; border: 1px solid #f87171;">
+                    important
+                </span>
+                <span onclick="document.getElementById('tag-name').value='legal'; document.getElementById('tag-color').value='#60a5fa';" 
+                      style="cursor: pointer; background: rgba(96, 165, 250, 0.2); color: #60a5fa; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; border: 1px solid #60a5fa;">
+                    legal
+                </span>
+                <span onclick="document.getElementById('tag-name').value='meeting'; document.getElementById('tag-color').value='#a78bfa';" 
+                      style="cursor: pointer; background: rgba(167, 139, 250, 0.2); color: #a78bfa; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; border: 1px solid #a78bfa;">
+                    meeting
+                </span>
+                <span onclick="document.getElementById('tag-name').value='urgent'; document.getElementById('tag-color').value='#fbbf24';" 
+                      style="cursor: pointer; background: rgba(251, 191, 36, 0.2); color: #fbbf24; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; border: 1px solid #fbbf24;">
+                    urgent
+                </span>
+                <span onclick="document.getElementById('tag-name').value='personal'; document.getElementById('tag-color').value='#fb7185';" 
+                      style="cursor: pointer; background: rgba(251, 113, 133, 0.2); color: #fb7185; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; border: 1px solid #fb7185;">
+                    personal
+                </span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--muted); margin-top: 8px;">
+                Click on any suggestion to use it
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Create new tag
+document.getElementById('create-tag-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const name = document.getElementById('tag-name').value.trim();
+    const color = document.getElementById('tag-color').value;
+    
+    if (!name) {
+        alert('Please enter a tag name');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/tags', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, color })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload(); // Refresh to show new tag
+        } else {
+            alert('Error creating tag: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating tag: ' + error.message);
+    }
+});
+
+// Edit tag (simplified - just shows current values)
+function editTag(id, name, color) {
+    const newName = prompt('Edit tag name:', name);
+    if (newName && newName.trim() && newName.trim() !== name) {
+        // This would need an update API endpoint
+        alert('Tag editing will be implemented in a future update');
+    }
+}
+
+// Delete tag
+function deleteTag(id, name) {
+    if (confirm(`Are you sure you want to delete the tag "${name}"?`)) {
+        // This would need a delete API endpoint
+        alert('Tag deletion will be implemented in a future update');
+    }
+}
+</script>
+{% endblock %}

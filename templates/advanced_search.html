@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Advanced Search - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+    <!-- Search Header -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h1 style="margin-bottom: 16px;">🔍 Advanced Search</h1>
+        <p style="color: var(--muted); margin: 0;">
+            Find your logs using powerful filters and search criteria. Search by content, tags, dates, verification status, and more.
+        </p>
+    </div>
+
+    <!-- Search Form -->
+    <div class="card" style="margin-bottom: 24px;">
+        <form method="POST" id="search-form">
+            {{ form.hidden_tag() }}
+            
+            <!-- Main Search Query -->
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="field">
+                    {{ form.query.label(class="form-label") }}
+                    {{ form.query(class="form-control", placeholder="Search in descriptions, recipients, and content...", style="font-size: 1.1rem; padding: 12px;") }}
+                    {% if form.query.errors %}
+                        <div class="field-errors">
+                            {% for error in form.query.errors %}
+                                <span class="error">{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Filter Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                <!-- Method Filter -->
+                <div class="field">
+                    {{ form.method.label(class="form-label") }}
+                    {{ form.method(class="form-control") }}
+                </div>
+
+                <!-- Verification Status Filter -->
+                <div class="field">
+                    {{ form.verification_status.label(class="form-label") }}
+                    {{ form.verification_status(class="form-control") }}
+                </div>
+
+                <!-- Recipient Filter -->
+                <div class="field">
+                    {{ form.recipient.label(class="form-label") }}
+                    {{ form.recipient(class="form-control", placeholder="Filter by recipient name...") }}
+                </div>
+
+                <!-- Tags Filter -->
+                <div class="field">
+                    {{ form.tags.label(class="form-label") }}
+                    {{ form.tags(class="form-control", placeholder="Enter tags separated by commas...") }}
+                    <div style="margin-top: 4px; font-size: 0.8rem; color: var(--muted);">
+                        Example: important, legal, meeting
+                    </div>
+                </div>
+            </div>
+
+            <!-- Date Range -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                <div class="field">
+                    {{ form.date_from.label(class="form-label") }}
+                    {{ form.date_from(class="form-control") }}
+                </div>
+                <div class="field">
+                    {{ form.date_to.label(class="form-label") }}
+                    {{ form.date_to(class="form-control") }}
+                </div>
+            </div>
+
+            <!-- Search Button -->
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button type="submit" class="button" style="font-size: 1.1rem; padding: 12px 24px;">
+                    🔍 Search Logs
+                </button>
+                <button type="button" class="button secondary" onclick="clearSearch()" style="padding: 12px 16px;">
+                    🗑️ Clear
+                </button>
+                <a href="{{ url_for('dashboard') }}" class="button secondary" style="padding: 12px 16px;">
+                    📋 Back to Dashboard
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Available Tags -->
+    {% if tags %}
+    <div class="card" style="margin-bottom: 24px;">
+        <h3 style="margin-bottom: 16px;">🏷️ Available Tags</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            {% for tag in tags[:20] %}
+                <span class="tag-badge" 
+                      onclick="addTagToSearch('{{ tag.name }}')" 
+                      style="cursor: pointer; background: {{ tag.color }}20; border: 1px solid {{ tag.color }}; color: {{ tag.color }}; padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; transition: all 0.2s ease;"
+                      onmouseover="this.style.background='{{ tag.color }}40'"
+                      onmouseout="this.style.background='{{ tag.color }}20'">
+                    {{ tag.name }} ({{ tag.usage_count }})
+                </span>
+            {% endfor %}
+            {% if tags|length > 20 %}
+                <a href="{{ url_for('manage_tags') }}" class="button secondary" style="font-size: 0.8rem; padding: 4px 8px;">
+                    View All {{ tags|length }} Tags
+                </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Search Tips -->
+    <div class="card">
+        <h3 style="margin-bottom: 16px;">💡 Search Tips</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Text Search</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    Search across log descriptions and recipient names. Use quotes for exact phrases.
+                </p>
+            </div>
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Tags</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    Filter by multiple tags using commas. Click on tag badges above to add them quickly.
+                </p>
+            </div>
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Date Ranges</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    Use date filters to find logs from specific time periods. Leave blank for no date restriction.
+                </p>
+            </div>
+            <div>
+                <h5 style="color: var(--accent); margin-bottom: 8px;">Verification Status</h5>
+                <p style="font-size: 0.85rem; color: var(--muted); margin: 0;">
+                    Filter by verification level: verified (blockchain/email), unverified, or pending.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function clearSearch() {
+    document.getElementById('search-form').reset();
+}
+
+function addTagToSearch(tagName) {
+    const tagsInput = document.getElementById('tags');
+    const currentTags = tagsInput.value.trim();
+    
+    if (currentTags) {
+        const tagList = currentTags.split(',').map(t => t.trim());
+        if (!tagList.includes(tagName)) {
+            tagsInput.value = currentTags + ', ' + tagName;
+        }
+    } else {
+        tagsInput.value = tagName;
+    }
+    
+    tagsInput.focus();
+}
+
+// Auto-suggest functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const queryInput = document.getElementById('query');
+    const recipientInput = document.getElementById('recipient');
+    
+    // Add search suggestions (simplified version)
+    [queryInput, recipientInput].forEach(input => {
+        if (input) {
+            input.addEventListener('input', function() {
+                // This could be enhanced with real-time suggestions via AJAX
+                console.log('Search input changed:', this.value);
+            });
+        }
+    });
+});
+</script>
+{% endblock %}
