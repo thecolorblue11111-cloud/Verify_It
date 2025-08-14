@@ -1,0 +1,577 @@
+{% extends "base.html" %}
+
+{% block title %}Create Log - Proof Logger{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <!-- Wizard Header -->
+    <div class="card" style="margin-bottom: 24px;">
+        <h1 style="margin-bottom: 16px;">📝 Create Communication Log</h1>
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+            <!-- Progress Steps -->
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                <div class="wizard-step active" data-step="1">
+                    <span class="step-number">1</span>
+                    <span class="step-label">Method</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="2">
+                    <span class="step-number">2</span>
+                    <span class="step-label">Details</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="3">
+                    <span class="step-number">3</span>
+                    <span class="step-label">Evidence</span>
+                </div>
+                <div class="wizard-connector"></div>
+                <div class="wizard-step" data-step="4">
+                    <span class="step-number">4</span>
+                    <span class="step-label">Review</span>
+                </div>
+            </div>
+        </div>
+        <p style="color: var(--muted); margin: 0;" id="step-description">
+            Choose the type of communication you want to log.
+        </p>
+    </div>
+
+    <!-- Wizard Form -->
+    <form id="wizard-form" method="POST" enctype="multipart/form-data">
+        {{ form.hidden_tag() }}
+        
+        <!-- Step 1: Communication Method -->
+        <div class="wizard-content card" id="step-1">
+            <h3 style="margin-bottom: 20px;">📞 Communication Method</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                <div class="method-card" data-method="email" onclick="selectMethod('email')">
+                    <div class="method-icon">📧</div>
+                    <h4>Email</h4>
+                    <p>Email correspondence and attachments</p>
+                </div>
+                <div class="method-card" data-method="phone" onclick="selectMethod('phone')">
+                    <div class="method-icon">📞</div>
+                    <h4>Phone Call</h4>
+                    <p>Voice calls with optional recording</p>
+                </div>
+                <div class="method-card" data-method="sms" onclick="selectMethod('sms')">
+                    <div class="method-icon">💬</div>
+                    <h4>SMS/Text</h4>
+                    <p>Text messages and screenshots</p>
+                </div>
+                <div class="method-card" data-method="meeting" onclick="selectMethod('meeting')">
+                    <div class="method-icon">🤝</div>
+                    <h4>In-Person Meeting</h4>
+                    <p>Face-to-face meetings and notes</p>
+                </div>
+                <div class="method-card" data-method="video_call" onclick="selectMethod('video_call')">
+                    <div class="method-icon">📹</div>
+                    <h4>Video Call</h4>
+                    <p>Video conferences and recordings</p>
+                </div>
+                <div class="method-card" data-method="letter" onclick="selectMethod('letter')">
+                    <div class="method-icon">✉️</div>
+                    <h4>Letter/Mail</h4>
+                    <p>Physical mail and documents</p>
+                </div>
+                <div class="method-card" data-method="chat" onclick="selectMethod('chat')">
+                    <div class="method-icon">💭</div>
+                    <h4>Chat/Messaging</h4>
+                    <p>Instant messages and chat logs</p>
+                </div>
+                <div class="method-card" data-method="other" onclick="selectMethod('other')">
+                    <div class="method-icon">📝</div>
+                    <h4>Other</h4>
+                    <p>Custom communication type</p>
+                </div>
+            </div>
+            {{ form.method(style="display: none;") }}
+        </div>
+
+        <!-- Step 2: Communication Details -->
+        <div class="wizard-content card" id="step-2" style="display: none;">
+            <h3 style="margin-bottom: 20px;">📋 Communication Details</h3>
+            
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="field">
+                    {{ form.recipient.label(class="form-label") }}
+                    {{ form.recipient(class="form-control", placeholder="Enter recipient name, email, or phone number...") }}
+                    <div style="margin-top: 4px; font-size: 0.8rem; color: var(--muted);">
+                        Who did you communicate with?
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="field">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control", rows="4", placeholder="Describe the communication content, purpose, and key points...") }}
+                    <div style="margin-top: 4px; font-size: 0.8rem; color: var(--muted);">
+                        What was discussed or communicated?
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="field">
+                    {{ form.notes.label(class="form-label") }}
+                    {{ form.notes(class="form-control", rows="3", placeholder="Additional notes, context, or follow-up actions...") }}
+                    <div style="margin-top: 4px; font-size: 0.8rem; color: var(--muted);">
+                        Optional: Any additional context or notes
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tags Input -->
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="field">
+                    <label class="form-label">Tags</label>
+                    <input type="text" id="tags-input" name="tags" class="form-control" 
+                           placeholder="Enter tags separated by commas (e.g., important, legal, meeting)...">
+                    <div style="margin-top: 8px;">
+                        <div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 8px;">Popular tags:</div>
+                        <div id="popular-tags" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                            <!-- Popular tags will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Evidence & Attachments -->
+        <div class="wizard-content card" id="step-3" style="display: none;">
+            <h3 style="margin-bottom: 20px;">📎 Evidence & Attachments</h3>
+            
+            <!-- File Upload -->
+            <div class="form-row" style="margin-bottom: 24px;">
+                <div class="field">
+                    {{ form.file.label(class="form-label") }}
+                    {{ form.file(class="form-control") }}
+                    <div style="margin-top: 8px; font-size: 0.8rem; color: var(--muted);">
+                        Upload documents, screenshots, or other evidence files (Max 16MB)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Audio Recording -->
+            <div class="form-row" style="margin-bottom: 24px;">
+                <div class="field">
+                    <label class="form-label">Audio Recording</label>
+                    <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                        <div id="audio-controls" style="display: flex; gap: 12px; align-items: center; margin-bottom: 12px;">
+                            <button type="button" id="record-btn" class="button secondary">
+                                🎤 Start Recording
+                            </button>
+                            <button type="button" id="stop-btn" class="button secondary" disabled>
+                                ⏹️ Stop
+                            </button>
+                            <span id="recording-status" style="color: var(--muted); font-size: 0.9rem;"></span>
+                        </div>
+                        <audio id="audio-playback" controls style="width: 100%; display: none;"></audio>
+                        <div style="font-size: 0.8rem; color: var(--muted); margin-top: 8px;">
+                            Record audio directly in your browser. The recording will be automatically transcribed.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Verification (for email method) -->
+            <div id="email-verification" style="display: none; margin-bottom: 24px;">
+                <div class="field">
+                    <label class="form-label">Email Verification</label>
+                    <div style="padding: 16px; background: rgba(110, 231, 183, 0.1); border-radius: 8px; border: 1px solid rgba(110, 231, 183, 0.3);">
+                        <p style="margin: 0 0 12px 0; font-size: 0.9rem;">
+                            📧 For email communications, we can verify the email headers and metadata for enhanced authenticity.
+                        </p>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="enable-email-verification" name="enable_email_verification">
+                            <span>Enable email verification (recommended)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: Review & Submit -->
+        <div class="wizard-content card" id="step-4" style="display: none;">
+            <h3 style="margin-bottom: 20px;">✅ Review & Submit</h3>
+            
+            <div id="review-content">
+                <!-- Review content will be populated by JavaScript -->
+            </div>
+
+            <div style="margin-top: 24px; padding: 16px; background: rgba(110, 231, 183, 0.1); border-radius: 8px; border: 1px solid rgba(110, 231, 183, 0.3);">
+                <h4 style="margin-bottom: 12px; color: var(--accent);">🔐 Security Features</h4>
+                <ul style="margin: 0; padding-left: 20px; color: var(--muted); font-size: 0.9rem;">
+                    <li>SHA256 hash will be generated for tamper detection</li>
+                    <li>Blockchain timestamp will be created via OpenTimestamps</li>
+                    <li>All data is encrypted and securely stored</li>
+                    <li>Public verification will be available via hash</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="card" style="display: flex; justify-content: space-between; align-items: center; padding: 16px;">
+            <button type="button" id="prev-btn" class="button secondary" onclick="previousStep()" style="display: none;">
+                ← Previous
+            </button>
+            <div style="flex: 1;"></div>
+            <button type="button" id="next-btn" class="button" onclick="nextStep()">
+                Next →
+            </button>
+            <button type="submit" id="submit-btn" class="button" style="display: none;">
+                🔒 Create Secure Log
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+.wizard-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 80px;
+}
+
+.wizard-step.active .step-number {
+    background: var(--accent);
+    color: #042024;
+}
+
+.wizard-step.completed .step-number {
+    background: var(--accent);
+    color: #042024;
+}
+
+.step-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.step-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+}
+
+.wizard-step.active .step-label {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.wizard-connector {
+    flex: 1;
+    height: 2px;
+    background: rgba(255,255,255,0.1);
+    margin: 0 8px;
+}
+
+.method-card {
+    padding: 20px;
+    background: rgba(255,255,255,0.02);
+    border: 2px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.method-card:hover {
+    border-color: rgba(110, 231, 183, 0.3);
+    background: rgba(110, 231, 183, 0.05);
+}
+
+.method-card.selected {
+    border-color: var(--accent);
+    background: rgba(110, 231, 183, 0.1);
+}
+
+.method-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+}
+
+.method-card h4 {
+    margin: 8px 0 4px 0;
+    color: #e6eef8;
+}
+
+.method-card p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.tag-suggestion {
+    background: rgba(110, 231, 183, 0.1);
+    color: var(--accent);
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    border: 1px solid rgba(110, 231, 183, 0.3);
+    transition: all 0.2s ease;
+}
+
+.tag-suggestion:hover {
+    background: rgba(110, 231, 183, 0.2);
+}
+</style>
+
+<script>
+let currentStep = 1;
+let selectedMethod = '';
+let audioRecorder = null;
+let audioChunks = [];
+
+// Step descriptions
+const stepDescriptions = {
+    1: "Choose the type of communication you want to log.",
+    2: "Provide details about the communication content and participants.",
+    3: "Add supporting evidence, files, or audio recordings.",
+    4: "Review your information and create the secure log."
+};
+
+// Initialize wizard
+document.addEventListener('DOMContentLoaded', function() {
+    loadPopularTags();
+    setupAudioRecording();
+});
+
+function selectMethod(method) {
+    selectedMethod = method;
+    document.getElementById('method').value = method;
+    
+    // Update visual selection
+    document.querySelectorAll('.method-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    document.querySelector(`[data-method="${method}"]`).classList.add('selected');
+    
+    // Show email verification for email method
+    const emailVerification = document.getElementById('email-verification');
+    if (method === 'email') {
+        emailVerification.style.display = 'block';
+    } else {
+        emailVerification.style.display = 'none';
+    }
+    
+    // Enable next button
+    document.getElementById('next-btn').disabled = false;
+}
+
+function nextStep() {
+    if (currentStep === 1 && !selectedMethod) {
+        alert('Please select a communication method');
+        return;
+    }
+    
+    if (currentStep === 2) {
+        const recipient = document.getElementById('recipient').value.trim();
+        const description = document.getElementById('description').value.trim();
+        
+        if (!recipient || !description) {
+            alert('Please fill in the recipient and description fields');
+            return;
+        }
+    }
+    
+    if (currentStep < 4) {
+        currentStep++;
+        updateWizardDisplay();
+    }
+}
+
+function previousStep() {
+    if (currentStep > 1) {
+        currentStep--;
+        updateWizardDisplay();
+    }
+}
+
+function updateWizardDisplay() {
+    // Hide all steps
+    document.querySelectorAll('.wizard-content').forEach(step => {
+        step.style.display = 'none';
+    });
+    
+    // Show current step
+    document.getElementById(`step-${currentStep}`).style.display = 'block';
+    
+    // Update step indicators
+    document.querySelectorAll('.wizard-step').forEach((step, index) => {
+        step.classList.remove('active', 'completed');
+        if (index + 1 === currentStep) {
+            step.classList.add('active');
+        } else if (index + 1 < currentStep) {
+            step.classList.add('completed');
+        }
+    });
+    
+    // Update description
+    document.getElementById('step-description').textContent = stepDescriptions[currentStep];
+    
+    // Update navigation buttons
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const submitBtn = document.getElementById('submit-btn');
+    
+    prevBtn.style.display = currentStep > 1 ? 'block' : 'none';
+    
+    if (currentStep === 4) {
+        nextBtn.style.display = 'none';
+        submitBtn.style.display = 'block';
+        populateReview();
+    } else {
+        nextBtn.style.display = 'block';
+        submitBtn.style.display = 'none';
+    }
+}
+
+function populateReview() {
+    const reviewContent = document.getElementById('review-content');
+    const method = selectedMethod;
+    const recipient = document.getElementById('recipient').value;
+    const description = document.getElementById('description').value;
+    const notes = document.getElementById('notes').value;
+    const tags = document.getElementById('tags-input').value;
+    
+    const methodIcons = {
+        'email': '📧', 'phone': '📞', 'sms': '💬', 'meeting': '🤝',
+        'video_call': '📹', 'letter': '✉️', 'chat': '💭', 'other': '📝'
+    };
+    
+    reviewContent.innerHTML = `
+        <div style="display: grid; gap: 16px;">
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px;">${methodIcons[method] || '📝'} Communication Method</h4>
+                <p style="margin: 0; color: var(--muted);">${method.replace('_', ' ').toUpperCase()}</p>
+            </div>
+            
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px;">👤 Recipient</h4>
+                <p style="margin: 0; color: var(--muted);">${recipient}</p>
+            </div>
+            
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px;">📝 Description</h4>
+                <p style="margin: 0; color: var(--muted);">${description}</p>
+            </div>
+            
+            ${notes ? `
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px;">📋 Notes</h4>
+                <p style="margin: 0; color: var(--muted);">${notes}</p>
+            </div>
+            ` : ''}
+            
+            ${tags ? `
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+                <h4 style="margin-bottom: 8px;">🏷️ Tags</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${tags.split(',').map(tag => `
+                        <span style="background: rgba(110, 231, 183, 0.1); color: var(--accent); padding: 2px 6px; border-radius: 8px; font-size: 0.8rem; border: 1px solid rgba(110, 231, 183, 0.3);">
+                            ${tag.trim()}
+                        </span>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+async function loadPopularTags() {
+    try {
+        // This would load popular tags from the API
+        const popularTags = ['important', 'legal', 'meeting', 'urgent', 'personal', 'business'];
+        const container = document.getElementById('popular-tags');
+        
+        container.innerHTML = popularTags.map(tag => `
+            <span class="tag-suggestion" onclick="addTag('${tag}')">${tag}</span>
+        `).join('');
+    } catch (error) {
+        console.error('Failed to load popular tags:', error);
+    }
+}
+
+function addTag(tag) {
+    const input = document.getElementById('tags-input');
+    const currentTags = input.value.trim();
+    
+    if (currentTags) {
+        const tagList = currentTags.split(',').map(t => t.trim());
+        if (!tagList.includes(tag)) {
+            input.value = currentTags + ', ' + tag;
+        }
+    } else {
+        input.value = tag;
+    }
+}
+
+function setupAudioRecording() {
+    const recordBtn = document.getElementById('record-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const status = document.getElementById('recording-status');
+    const playback = document.getElementById('audio-playback');
+    
+    recordBtn.addEventListener('click', startRecording);
+    stopBtn.addEventListener('click', stopRecording);
+    
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            audioRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+            
+            audioRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                playback.src = audioUrl;
+                playback.style.display = 'block';
+                
+                // Create a file input for the audio
+                const audioFile = new File([audioBlob], 'recording.wav', { type: 'audio/wav' });
+                // This would need to be handled in the form submission
+            };
+            
+            audioRecorder.start();
+            recordBtn.disabled = true;
+            stopBtn.disabled = false;
+            status.textContent = '🔴 Recording...';
+            recordBtn.classList.add('recording');
+            
+        } catch (error) {
+            alert('Error accessing microphone: ' + error.message);
+        }
+    }
+    
+    function stopRecording() {
+        if (audioRecorder && audioRecorder.state === 'recording') {
+            audioRecorder.stop();
+            audioRecorder.stream.getTracks().forEach(track => track.stop());
+            
+            recordBtn.disabled = false;
+            stopBtn.disabled = true;
+            status.textContent = '✅ Recording complete';
+            recordBtn.classList.remove('recording');
+        }
+    }
+}
+</script>
+{% endblock %}
