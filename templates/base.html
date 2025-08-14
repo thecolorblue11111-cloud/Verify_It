@@ -9,17 +9,22 @@
 </head>
 <body>
     <div class="container">
-        {% if current_user.is_authenticated %}
         <header>
             <h1>📜 Proof Logger</h1>
             <nav>
-                <a href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a href="{{ url_for('new_log') }}">+ New Log</a>
-                <a href="{{ url_for('dashboard') }}#security">Settings</a>
-                <a href="{{ url_for('logout') }}">Logout</a>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                    <a href="{{ url_for('new_log') }}">+ New Log</a>
+                    <a href="{{ url_for('dashboard') }}#security">Settings</a>
+                    <a href="{{ url_for('public_verify_index') }}">🔍 Verify</a>
+                    <a href="{{ url_for('logout') }}">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('public_verify_index') }}">🔍 Verify</a>
+                    <a href="{{ url_for('login') }}">Login</a>
+                    <a href="{{ url_for('register') }}">Register</a>
+                {% endif %}
             </nav>
         </header>
-        {% endif %}
         
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}

@@ -40,6 +40,11 @@ from forms import (
     LoginForm, RegistrationForm, LogCreationForm, MFASetupForm, 
     MFAVerifyForm, SearchForm, PublicVerificationForm, ContactForm
 )
+from verification import (
+    verify_log_hash, generate_verification_certificate, 
+    create_verification_qr_code, get_verification_statistics,
+    log_verification_attempt
+)
 
 # Configure logging
 logging.basicConfig(
@@ -2177,6 +2182,227 @@ def api_audit_log_details(log_id):
         'hash': log_data[11],
         'previous_hash': log_data[12]
     })
+
+# Public Verification Routes
+@app.route('/verify')
+def public_verify_index():
+    """Public verification landing page"""
+    form = PublicVerificationForm()
+    stats = get_verification_statistics()
+    return render_template('public_verify.html', form=form, stats=stats)
+
+@app.route('/verify', methods=['POST'])
+@limiter.limit("20 per minute")  # Rate limiting for verification attempts
+def public_verify_submit():
+    """Handle public verification form submission"""
+    form = PublicVerificationForm()
+    stats = get_verification_statistics()
+    
+    if form.validate_on_submit():
+        log_hash = form.log_hash.data
+        
+        # Perform verification
+        verification_result = verify_log_hash(log_hash)
+        
+        # Log the verification attempt
+        audit_data = log_verification_attempt(log_hash, verification_result, request.remote_addr)
+        create_audit_log(**audit_data)
+        
+        # Generate QR code for sharing
+        qr_code = create_verification_qr_code(log_hash)
+        
+        return render_template('verification_result.html', 
+                             result=verification_result, 
+                             qr_code=qr_code,
+                             log_hash=log_hash)
+    
+    return render_template('public_verify.html', form=form, stats=stats)
+
+@app.route('/verify/<log_hash>')
+def public_verify_direct(log_hash):
+    """Direct verification via URL (for QR codes and sharing)"""
+    if len(log_hash) != 64 or not all(c in '0123456789abcdefABCDEF' for c in log_hash):
+        flash('Invalid verification hash format.', 'danger')
+        return redirect(url_for('public_verify_index'))
+    
+    # Perform verification
+    verification_result = verify_log_hash(log_hash.lower())
+    
+    # Log the verification attempt
+    audit_data = log_verification_attempt(log_hash, verification_result, request.remote_addr)
+    create_audit_log(**audit_data)
+    
+    # Generate QR code for sharing
+    qr_code = create_verification_qr_code(log_hash)
+    
+    return render_template('verification_result.html', 
+                         result=verification_result, 
+                         qr_code=qr_code,
+                         log_hash=log_hash)
+
+@app.route('/verify/<log_hash>/certificate')
+def verification_certificate(log_hash):
+    """Generate and download verification certificate"""
+    if len(log_hash) != 64 or not all(c in '0123456789abcdefABCDEF' for c in log_hash):
+        return abort(400, "Invalid hash format")
+    
+    # Perform verification
+    verification_result = verify_log_hash(log_hash.lower())
+    
+    if not verification_result.log_data:
+        return abort(404, "Log not found")
+    
+    # Generate certificate
+    certificate = generate_verification_certificate(verification_result)
+    
+    # Log certificate generation
+    audit_data = log_verification_attempt(log_hash, verification_result, request.remote_addr)
+    create_audit_log(**audit_data)
+    
+    return jsonify(certificate)
+
+@app.route('/verify/<log_hash>/certificate.pdf')
+def verification_certificate_pdf(log_hash):
+    """Generate and download PDF verification certificate"""
+    if len(log_hash) != 64 or not all(c in '0123456789abcdefABCDEF' for c in log_hash):
+        return abort(400, "Invalid hash format")
+    
+    # Perform verification
+    verification_result = verify_log_hash(log_hash.lower())
+    
+    if not verification_result.log_data:
+        return abort(404, "Log not found")
+    
+    try:
+        # Generate PDF certificate
+        pdf_path = generate_verification_pdf(verification_result, log_hash)
+        
+        if pdf_path:
+            # Log certificate generation
+            audit_data = log_verification_attempt(log_hash, verification_result, request.remote_addr)
+            create_audit_log(**audit_data)
+            
+            return send_file(pdf_path, 
+                           as_attachment=True, 
+                           download_name=f'verification_certificate_{log_hash[:16]}.pdf',
+                           mimetype='application/pdf')
+        else:
+            return abort(500, "Certificate generation failed")
+    
+    except Exception as e:
+        logging.error(f"PDF certificate generation failed: {e}")
+        return abort(500, "Certificate generation failed")
+
+def generate_verification_pdf(verification_result, log_hash):
+    """Generate PDF verification certificate"""
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        import tempfile
+        
+        # Create temporary file
+        temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        
+        # Create PDF document
+        doc = SimpleDocTemplate(temp_pdf.name, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            textColor=colors.darkblue
+        )
+        story.append(Paragraph("🔐 Verification Certificate", title_style))
+        story.append(Spacer(1, 20))
+        
+        # Certificate info
+        cert_data = generate_verification_certificate(verification_result)
+        
+        # Verification status
+        status_color = colors.green if verification_result.is_valid else colors.red
+        status_text = "✅ VERIFIED" if verification_result.is_valid else "❌ VERIFICATION FAILED"
+        
+        status_style = ParagraphStyle(
+            'Status',
+            parent=styles['Heading2'],
+            fontSize=18,
+            alignment=TA_CENTER,
+            textColor=status_color,
+            spaceAfter=20
+        )
+        story.append(Paragraph(status_text, status_style))
+        story.append(Spacer(1, 20))
+        
+        # Log details table
+        log_data = verification_result.log_data
+        details_data = [
+            ['Field', 'Value'],
+            ['Communication Method', log_data['method']],
+            ['Recipient', log_data['recipient']],
+            ['Timestamp', log_data['timestamp']],
+            ['Hash (SHA256)', log_hash],
+            ['Hash Verified', '✅ Yes' if verification_result.hash_verified else '❌ No'],
+            ['Blockchain Timestamp', verification_result.timestamp_status or 'Not available'],
+            ['Timestamp Verified', '✅ Yes' if verification_result.timestamp_verified else '❌ No']
+        ]
+        
+        details_table = Table(details_data, colWidths=[2*inch, 4*inch])
+        details_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        
+        story.append(details_table)
+        story.append(Spacer(1, 30))
+        
+        # Description
+        if log_data['description']:
+            story.append(Paragraph("<b>Description:</b>", styles['Heading3']))
+            story.append(Paragraph(log_data['description'][:500] + ('...' if len(log_data['description']) > 500 else ''), styles['Normal']))
+            story.append(Spacer(1, 20))
+        
+        # Certificate details
+        story.append(Paragraph("<b>Certificate Details:</b>", styles['Heading3']))
+        story.append(Paragraph(f"Certificate ID: {cert_data['certificate_id']}", styles['Normal']))
+        story.append(Paragraph(f"Generated: {cert_data['generated_at']}", styles['Normal']))
+        story.append(Paragraph(f"Verification Method: {cert_data['verification_method']}", styles['Normal']))
+        story.append(Spacer(1, 30))
+        
+        # Footer
+        footer_style = ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=10,
+            alignment=TA_CENTER,
+            textColor=colors.grey
+        )
+        story.append(Paragraph("This certificate was generated by the Proof Logger verification system.", footer_style))
+        story.append(Paragraph(f"Verify online at: /verify/{log_hash}", footer_style))
+        
+        # Build PDF
+        doc.build(story)
+        temp_pdf.close()
+        
+        return temp_pdf.name
+    
+    except Exception as e:
+        logging.error(f"PDF generation failed: {e}")
+        return None
 
 def init_db():
     """Initialize the database with required tables"""
