@@ -1,5 +1,5 @@
 from flask import Flask
-from app.config.defaults import apply_default_config
+from config import apply_default_config
 from app.config.session import configure_session
 from app.middleware.security_headers import set_security_headers
 from app.config.csrf import init_csrf
